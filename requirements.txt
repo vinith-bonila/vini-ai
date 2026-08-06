@@ -1,0 +1,32 @@
+# ─── Core application ───────────────────────────────────────────────
+streamlit==1.61.1
+python-dotenv==1.2.2
+requests==2.33.1
+pandas==3.0.2
+plotly==6.9.0
+
+# ─── NLP stack ──────────────────────────────────────────────────────
+spacy==3.8.14
+# spaCy English model, installed directly from the official release wheel
+# so it is available at deploy time (Streamlit Cloud, Docker, etc.)
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+scikit-learn==1.8.0
+vaderSentiment==3.3.2
+langdetect==1.0.9
+rapidfuzz==3.14.5
+numexpr==2.14.2
+
+# ─── Skills / services ──────────────────────────────────────────────
+wikipedia==1.4.0
+deep-translator==1.11.4
+
+# ─── Speech + LLM ───────────────────────────────────────────────────
+openai>=1.40.0          # chat, hosted Whisper (STT), hosted TTS
+gTTS==2.5.4             # free text-to-speech (default TTS backend)
+
+# ─── Optional upgrades (uncomment to enable) ───────────────────────
+# sentence-transformers>=3.0.0   # USE_EMBEDDINGS=true  (better intent accuracy)
+# transformers>=4.44.0           # USE_HF_SENTIMENT=true (transformer sentiment)
+# torch>=2.2.0                    # backend for the two above
+# faster-whisper>=1.0.0          # STT_BACKEND=local    (on-device Whisper)
+# pyttsx3>=2.90                  # TTS_BACKEND=pyttsx3  (offline desktop voice)

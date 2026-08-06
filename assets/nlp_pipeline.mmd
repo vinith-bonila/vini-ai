@@ -1,0 +1,9 @@
+flowchart LR
+    A[Raw utterance] --> B[Language<br/>detection]
+    B --> C[Intent<br/>classification]
+    C --> D[Entity + slot<br/>extraction]
+    D --> E[POS +<br/>dependency parse]
+    E --> F[Sentiment]
+    F --> G[NLUResult]
+    C -.confidence < floor.-> H[GENERAL_CHAT<br/>LLM fallback]
+    G --> I[Router]

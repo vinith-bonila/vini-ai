@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+h1, h2, h3, .vini-brand { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.01em; }
+
+/* Brand lockup */
+.vini-brand { font-size: 2.2rem; font-weight: 700; margin-bottom: 0; }
+.vini-brand .dot { color: #7C5CFF; }
+.vini-tag { color: #8A93AB; font-size: 0.95rem; margin-top: -4px; }
+
+/* Machine-readout styling: NLP internals read as instrument output */
+.readout, .stCode, code { font-family: 'JetBrains Mono', monospace !important; }
+.pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.75rem;
+        font-weight:600; font-family:'JetBrains Mono',monospace; }
+.pill-intent { background:rgba(124,92,255,0.15); color:#B7A6FF; border:1px solid rgba(124,92,255,0.4); }
+.pill-live   { background:rgba(56,225,198,0.14); color:#38E1C6; border:1px solid rgba(56,225,198,0.4); }
+.pill-idle   { background:rgba(138,147,171,0.12); color:#8A93AB; border:1px solid rgba(138,147,171,0.3); }
+
+/* Confidence meter */
+.meter { height:8px; border-radius:6px; background:#1E263F; overflow:hidden; margin-top:6px; }
+.meter > span { display:block; height:100%; background:linear-gradient(90deg,#7C5CFF,#38E1C6); }

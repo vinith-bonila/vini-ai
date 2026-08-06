@@ -1,0 +1,48 @@
+flowchart TB
+    subgraph UI["Streamlit UI"]
+        HOME[Home / Assistant]
+        ANALYTICS[Analytics]
+        SETTINGS[Settings]
+    end
+
+    subgraph SPEECH["Speech Layer"]
+        STT[Speech-to-Text<br/>Whisper]
+        TTS[Text-to-Speech<br/>gTTS / OpenAI]
+    end
+
+    subgraph ASSIST["Assistant Layer"]
+        DISP[Dispatcher]
+        CONV[Conversation<br/>context]
+        ROUTE[Router<br/>intent to handler]
+    end
+
+    subgraph NLP["NLP Pipeline"]
+        LANG[Language ID]
+        INTENT[Intent Classifier]
+        NER[NER + Slots]
+        PARSE[POS / Dependency]
+        SENT[Sentiment]
+    end
+
+    subgraph SVC["Skills / Services"]
+        WIKI[Wikipedia]
+        WEB[Web / YouTube]
+        TRANS[Translation]
+        WX[Weather]
+        CALC[Calculator / Units]
+        UTIL[Time / Date / Joke / Dict / News]
+        LLM[OpenAI Chat]
+    end
+
+    DB[(SQLite<br/>turn log)]
+
+    HOME --> STT --> DISP
+    HOME --> DISP
+    DISP --> NLP
+    DISP --> CONV
+    NLP --> ROUTE
+    ROUTE --> SVC
+    SVC --> DISP
+    DISP --> DB
+    DISP --> TTS --> HOME
+    DB --> ANALYTICS
