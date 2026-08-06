@@ -28,7 +28,8 @@ def run(text: str, entities, context=None) -> SkillResponse:
         translated = GoogleTranslator(source="auto", target=target).translate(to_translate)
         return SkillResponse(
             speech=translated,
-            data={"source_text": to_translate, "target_language": target_raw, "translated": translated},
+            data={"source_text": to_translate, "target_language": target_raw,
+                  "target_code": target, "translated": translated},
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Translation error: %s", exc)

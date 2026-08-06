@@ -128,7 +128,12 @@ if result is not None:
             for link in result.response.links:
                 st.link_button(link.label, link.url)
         if st.session_state.speak_replies and result.response.success:
-            audio_bytes = synthesize(result.response.speech, lang=result.nlu.language)
+            # Always speak English by default; only a translation is spoken in
+            # its target language, so replies never come out in a misdetected voice.
+            tts_lang = "en"
+            if result.nlu.intent == "TRANSLATE":
+                tts_lang = result.response.data.get("target_code", "en")
+            audio_bytes = synthesize(result.response.speech, lang=tts_lang)
             if audio_bytes:
                 st.audio(audio_bytes, format="audio/mp3", autoplay=True)
     with right:
