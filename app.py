@@ -12,7 +12,7 @@ import streamlit as st
 from assistant.conversation import Conversation
 from assistant.dispatcher import handle
 from config import settings
-from speech.speech_to_text import transcribe
+from speech.speech_to_text import TranscriptionError, transcribe
 from speech.text_to_speech import synthesize
 from ui import brand_header, confidence_meter, inject_css, render_nlu_panels, status_pill
 
@@ -91,12 +91,18 @@ with col_voice:
             if digest != st.session_state.last_audio_hash:
                 st.session_state.last_audio_hash = digest
                 st.session_state.status = "listening"
-                spoken = transcribe(audio_bytes)
+                spoken, error = "", None
+                try:
+                    spoken = transcribe(audio_bytes)
+                except TranscriptionError as exc:
+                    error = str(exc)
                 if spoken:
                     st.toast(f"Heard: {spoken}")
                     process(spoken)
+                elif error:
+                    st.error(f"Transcription failed: {error}")
                 else:
-                    st.warning("I couldn't transcribe that. Check the STT backend in Settings.")
+                    st.warning("I heard silence - try speaking a little longer.")
     else:
         st.info("Upgrade Streamlit to enable in-browser voice input.")
 with col_hint:
