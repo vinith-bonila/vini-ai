@@ -13,6 +13,7 @@ Errors are raised (not silently swallowed) so the UI can show the real reason.
 """
 from __future__ import annotations
 
+import importlib
 import tempfile
 from functools import lru_cache
 
