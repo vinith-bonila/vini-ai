@@ -63,6 +63,16 @@ INTENT_EXAMPLES: dict[str, list[str]] = {
         "tell me the news",
         "what's happening in the news",
     ],
+    "WEB_ANSWER": [
+        "who is the current prime minister of india",
+        "who is the president of the united states right now",
+        "what is the latest iphone",
+        "how much does gold cost today",
+        "who won the match yesterday",
+        "what is the current price of bitcoin",
+        "what are the latest developments in ai",
+        "current ceo of google",
+    ],
     "TIME": [
         "what time is it",
         "tell me the current time",

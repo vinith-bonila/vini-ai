@@ -19,6 +19,7 @@ numexpr==2.14.2
 # ─── Skills / services ──────────────────────────────────────────────
 wikipedia==1.4.0
 deep-translator==1.11.4
+ddgs>=9.0.0            # live web search (DuckDuckGo, no API key)
 
 # ─── Speech + LLM ───────────────────────────────────────────────────
 openai>=1.40.0          # chat, hosted Whisper (STT), hosted TTS
