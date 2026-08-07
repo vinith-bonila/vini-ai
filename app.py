@@ -6,6 +6,7 @@ Run with:  streamlit run app.py
 from __future__ import annotations
 
 import hashlib
+import re
 
 import streamlit as st
 
@@ -14,7 +15,7 @@ from assistant.dispatcher import handle
 from config import settings
 from speech.speech_to_text import TranscriptionError, transcribe
 from speech.text_to_speech import synthesize
-from ui import brand_header, confidence_meter, inject_css, render_nlu_panels, status_pill
+from ui import brand_header, inject_css, render_nlu_panels, status_pill
 
 st.set_page_config(page_title="VINI AI", page_icon="\U0001F399\uFE0F", layout="wide")
 inject_css()
@@ -22,16 +23,19 @@ inject_css()
 # --------------------------------------------------------------------------- #
 # Session state
 # --------------------------------------------------------------------------- #
-if "conversation" not in st.session_state:
+_defaults = {
+    "conversation": None,
+    "last_result": None,
+    "status": "idle",
+    "last_audio_hash": None,
+    "speak_replies": True,
+    "pending_text": "",
+}
+for key, val in _defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
+if st.session_state.conversation is None:
     st.session_state.conversation = Conversation()
-if "last_result" not in st.session_state:
-    st.session_state.last_result = None
-if "status" not in st.session_state:
-    st.session_state.status = "idle"
-if "last_audio_hash" not in st.session_state:
-    st.session_state.last_audio_hash = None
-if "speak_replies" not in st.session_state:
-    st.session_state.speak_replies = True
 
 conv: Conversation = st.session_state.conversation
 
@@ -44,6 +48,24 @@ def process(text: str) -> None:
     result = handle(text, conv)
     st.session_state.last_result = result
     st.session_state.status = "idle"
+
+
+def _submit_text() -> None:
+    """Enter in the text box: queue the message and clear the field."""
+    typed = st.session_state.get("text_box", "")
+    if typed.strip():
+        st.session_state.pending_text = typed
+    st.session_state.text_box = ""
+
+
+def _speech_lead(text: str, limit: int = 320) -> str:
+    """Speak only a short lead for long answers so voice stays pleasant."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    lead = " ".join(sentences[:2]).strip()
+    return (lead or text)[:limit]
 
 
 # --------------------------------------------------------------------------- #
@@ -79,41 +101,50 @@ st.write(
 )
 
 # --------------------------------------------------------------------------- #
-# Input row: push-to-talk (voice) + text
+# Input row: text field + voice button, side by side
 # --------------------------------------------------------------------------- #
-col_voice, col_hint = st.columns([1, 2])
-with col_voice:
-    if hasattr(st, "audio_input"):
-        audio = st.audio_input("Push to talk")
-        if audio is not None:
-            audio_bytes = audio.getvalue()
-            digest = hashlib.md5(audio_bytes).hexdigest()
-            if digest != st.session_state.last_audio_hash:
-                st.session_state.last_audio_hash = digest
-                st.session_state.status = "listening"
-                spoken, error = "", None
-                try:
-                    spoken = transcribe(audio_bytes)
-                except TranscriptionError as exc:
-                    error = str(exc)
-                if spoken:
-                    st.toast(f"Heard: {spoken}")
-                    process(spoken)
-                elif error:
-                    st.error(f"Transcription failed: {error}")
-                else:
-                    st.warning("I heard silence - try speaking a little longer.")
-    else:
-        st.info("Upgrade Streamlit to enable in-browser voice input.")
-with col_hint:
-    st.caption(
-        "Try: *play Believer by Imagine Dragons* \u00b7 *translate good morning to French* "
-        "\u00b7 *what's 18% of 4500* \u00b7 *weather in Mumbai* \u00b7 *who is Alan Turing*"
+text_col, mic_col = st.columns([4, 1.3], vertical_alignment="bottom")
+with text_col:
+    st.text_input(
+        "Message",
+        key="text_box",
+        placeholder="Type a message to VINI AI...",
+        label_visibility="collapsed",
+        on_change=_submit_text,
     )
+with mic_col:
+    audio = st.audio_input("Voice", label_visibility="collapsed") if hasattr(st, "audio_input") else None
 
-text_in = st.chat_input("Type a message to VINI AI...")
-if text_in:
-    process(text_in)
+st.caption(
+    "Try: *play Believer by Imagine Dragons* \u00b7 *translate good morning to French* "
+    "\u00b7 *what's 18% of 4500* \u00b7 *weather in Mumbai* \u00b7 *who is Alan Turing*"
+)
+
+# Handle a submitted text message.
+if st.session_state.pending_text:
+    queued = st.session_state.pending_text
+    st.session_state.pending_text = ""
+    process(queued)
+
+# Handle a new voice recording.
+if audio is not None:
+    audio_bytes = audio.getvalue()
+    digest = hashlib.md5(audio_bytes).hexdigest()
+    if digest != st.session_state.last_audio_hash:
+        st.session_state.last_audio_hash = digest
+        st.session_state.status = "listening"
+        spoken, error = "", None
+        try:
+            spoken = transcribe(audio_bytes)
+        except TranscriptionError as exc:
+            error = str(exc)
+        if spoken:
+            st.toast(f"Heard: {spoken}")
+            process(spoken)
+        elif error:
+            st.error(f"Transcription failed: {error}")
+        else:
+            st.warning("I heard silence - try speaking a little longer.")
 
 # --------------------------------------------------------------------------- #
 # Latest response + NLP transparency panels
@@ -133,7 +164,7 @@ if result is not None:
             tts_lang = "en"
             if result.nlu.intent == "TRANSLATE":
                 tts_lang = result.response.data.get("target_code", "en")
-            audio_bytes = synthesize(result.response.speech, lang=tts_lang)
+            audio_bytes = synthesize(_speech_lead(result.response.speech), lang=tts_lang)
             if audio_bytes:
                 st.audio(audio_bytes, format="audio/mp3", autoplay=True)
     with right:
