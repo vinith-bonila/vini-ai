@@ -2,11 +2,21 @@
 The dispatcher - the single entry point the UI calls.
 
 For each user utterance it: runs the NLU pipeline, resolves follow-ups against
-conversation context, routes to the right skill, records the turn, persists an
-analytics row, and returns a combined result the UI can render.
+conversation context, resolves the final intent (fixing classifier false
+positives), routes to the right skill, records the turn, persists an analytics
+row, and returns a combined result the UI can render.
+
+Intent resolution policy (layered on top of the NLP classifier):
+  * TIME / DATE only fire when the question genuinely asks for the current
+    clock time or today's date - never because the word "time" happens to
+    appear (e.g. "how much time does it take to travel to the moon").
+  * Questions needing current, real-world facts ("who is the current PM",
+    "latest ...", "price of ...") go to live web search.
+  * Everything else that isn't a deterministic skill is answered by the LLM.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from assistant.conversation import Conversation
@@ -32,33 +42,79 @@ class AssistantResult:
         return bool(self.response.data.get("end_session"))
 
 
-# Words that signal a question needs current, real-world facts.
+# --------------------------------------------------------------------------- #
+# Intent resolution rules
+# --------------------------------------------------------------------------- #
+
+# A genuine request for the current clock time.
+_TIME_REQUEST = re.compile(
+    r"(what(?:'?s| is)?\s+the\s+time"
+    r"|what\s+time\s+is\s+it"
+    r"|current\s+time"
+    r"|time\s+(?:right\s+)?now"
+    r"|tell\s+me\s+the\s+time"
+    r"|give\s+me\s+the\s+time)"
+    r"|^\s*time\s*\??\s*$",
+    re.I,
+)
+
+# A genuine request for today's date (not "the date of <some event>").
+_DATE_REQUEST = re.compile(
+    r"(what(?:'?s| is)?\s+the\s+date(?!\s+of)"
+    r"|what(?:'?s| is)?\s+date"
+    r"|today'?s\s+date"
+    r"|current\s+date"
+    r"|date\s+today"
+    r"|what\s+day\s+is\s+(?:it|today))"
+    r"|^\s*date\s*\??\s*$",
+    re.I,
+)
+
+# Words signalling a question needs current, real-world facts.
 _FRESH_MARKERS = (
     "current", "currently", "latest", "today", "right now", "this year",
     "recent", "recently", "nowadays", "at present", "these days",
     "2024", "2025", "2026", "who won", "price of", "stock price", "as of",
+    "up to date", "up-to-date",
 )
-# Skills that own their queries and must never be hijacked by web search.
+
+# Deterministic skills that own their queries and must not be hijacked.
+# (Wikipedia and News are intentionally NOT here: a "current/latest" question
+#  should be answered from a live web search, not a static summary or a link.)
 _PROTECTED = {
     "WEATHER", "CALCULATOR", "UNIT_CONVERSION", "PLAY_MUSIC", "TRANSLATE",
-    "JOKE", "DICTIONARY", "GREETING", "GOODBYE",
+    "JOKE", "DICTIONARY", "GREETING", "GOODBYE", "WEB_SEARCH", "YOUTUBE_SEARCH",
 }
-# Words that mark a genuine time/date request (so those stay with TIME/DATE).
-_TIME_DATE_WORDS = ("time", "clock", "o'clock", "date", "day is", "what day")
 
 
-def _needs_fresh_info(text: str, intent: str) -> bool:
-    """Should this question be answered with a live web search instead?"""
+def _needs_fresh_info(text: str) -> bool:
     low = text.lower()
-    if not any(marker in low for marker in _FRESH_MARKERS):
-        return False
-    if intent in _PROTECTED:
-        return False
+    return any(marker in low for marker in _FRESH_MARKERS)
+
+
+def resolve_intent(nlu: NLUResult) -> str:
+    """Decide the final intent, correcting common classifier mistakes."""
+    text = nlu.text
+    intent = nlu.intent
+
+    # 1) Genuine current-time / current-date question -> the right skill,
+    #    even if the classifier missed it.
+    if _TIME_REQUEST.search(text):
+        return "TIME"
+    if _DATE_REQUEST.search(text):
+        return "DATE"
+
+    # 2) Classifier said TIME/DATE but it isn't actually asking for the clock
+    #    or today's date (e.g. "how much time to travel", "give me ...").
     if intent in {"TIME", "DATE"}:
-        # A real time/date question keeps its skill; a misrouted one
-        # (e.g. "who is the current PM") falls through to web search.
-        return not any(word in low for word in _TIME_DATE_WORDS)
-    return True
+        return "WEB_ANSWER" if _needs_fresh_info(text) else "GENERAL_CHAT"
+
+    # 3) A current-facts question that isn't a deterministic skill -> web search.
+    if intent not in _PROTECTED and _needs_fresh_info(text):
+        return "WEB_ANSWER"
+
+    # 4) Otherwise trust the classifier (skills, Wikipedia, general chat, ...).
+    return intent
 
 
 def handle(text: str, conversation: Conversation) -> AssistantResult:
@@ -66,9 +122,10 @@ def handle(text: str, conversation: Conversation) -> AssistantResult:
     with timed() as t:
         nlu = analyze(text)
         nlu = conversation.resolve_followups(nlu)
-        if _needs_fresh_info(nlu.text, nlu.intent):
-            logger.debug("Freshness override: %s -> WEB_ANSWER", nlu.intent)
-            nlu.intent = "WEB_ANSWER"
+        final_intent = resolve_intent(nlu)
+        if final_intent != nlu.intent:
+            logger.debug("Intent override: %s -> %s (%r)", nlu.intent, final_intent, text)
+            nlu.intent = final_intent
         response = route(nlu.intent, nlu.text, nlu.entities, conversation)
 
     result = AssistantResult(nlu=nlu, response=response, response_time_ms=t["ms"])
