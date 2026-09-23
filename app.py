@@ -67,7 +67,7 @@ def _speech_lead(text: str, limit: int = 320) -> str:
     return (lead or text)[:limit]
 
 
-def process(text: str, core_ph) -> None:
+def process(text: str, core_ph, response_ph) -> None:
     """Run one utterance through the real pipeline.
 
     The Voice Intelligence Core is redrawn into `core_ph` right before each
@@ -77,6 +77,11 @@ def process(text: str, core_ph) -> None:
     text = (text or "").strip()
     if not text:
         return
+
+    # Drop the previous answer before anything else. Its <audio> element would
+    # otherwise keep playing over the new turn while this one is processed.
+    response_ph.empty()
+    st.session_state["_pending_audio"] = None
 
     st.session_state.status = "understanding"
     render_voice_core(core_ph, "understanding")
@@ -159,13 +164,17 @@ with st.container(key="suggestions"):
         if st.button(suggestion, key=f"sugg_{suggestion}"):
             clicked_suggestion = suggestion
 
+# Declared before routing so a new turn can clear the previous answer - and
+# with it the audio element still playing from that answer.
+response_ph = st.empty()
+
 # --------------------------------------------------------------------------- #
 # Route whichever input fired this run through the real pipeline
 # --------------------------------------------------------------------------- #
 if submitted and typed.strip():
-    process(typed, core_ph)
+    process(typed, core_ph, response_ph)
 elif clicked_suggestion:
-    process(clicked_suggestion, core_ph)
+    process(clicked_suggestion, core_ph, response_ph)
 elif recording is not None:
     audio_bytes, recording_id = recording
     if recording_id != st.session_state.last_recording_id:
@@ -179,7 +188,7 @@ elif recording is not None:
             error = str(exc)
         if spoken:
             st.toast(f"Heard: {spoken}")
-            process(spoken, core_ph)
+            process(spoken, core_ph, response_ph)
         else:
             st.session_state.status = "idle"
             render_voice_core(core_ph, "idle")
@@ -193,24 +202,27 @@ elif recording is not None:
 # --------------------------------------------------------------------------- #
 result = st.session_state.last_result
 if result is not None:
-    st.divider()
-    left, right = st.columns([1.3, 1])
-    with left:
-        st.markdown("#### Response")
-        last_turn = conv.last_turn
-        if last_turn is not None:
-            user_bubble(last_turn.user_text)
-        assistant_bubble(result.response.speech)
-        for link in result.response.links:
-            st.link_button(link.label, link.url)
+    # Rendered inside the placeholder so the next turn can remove it wholesale,
+    # which is what actually stops the previous reply's audio.
+    with response_ph.container():
+        st.divider()
+        left, right = st.columns([1.3, 1])
+        with left:
+            st.markdown("#### Response")
+            last_turn = conv.last_turn
+            if last_turn is not None:
+                user_bubble(last_turn.user_text)
+            assistant_bubble(result.response.speech)
+            for link in result.response.links:
+                st.link_button(link.label, link.url)
 
-        pending_audio = st.session_state.get("_pending_audio")
-        if pending_audio:
-            st.audio(pending_audio, format="audio/mp3", autoplay=True)
-        st.session_state["_pending_audio"] = None
-    with right:
-        st.markdown("#### Intent Analysis")
-        render_nlu_panels(result)
+            pending_audio = st.session_state.get("_pending_audio")
+            if pending_audio:
+                st.audio(pending_audio, format="audio/mp3", autoplay=True)
+            st.session_state["_pending_audio"] = None
+        with right:
+            st.markdown("#### Intent Analysis")
+            render_nlu_panels(result)
 
 # --------------------------------------------------------------------------- #
 # Conversation history

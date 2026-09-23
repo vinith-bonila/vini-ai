@@ -15,6 +15,15 @@ from assistant.schemas import SkillResponse
 LLM_ANSWER = "Crude oil is brought to surface by drilling a wellbore..."
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """No test may reach the real web-search backend."""
+    def blocked(*a, **k):
+        raise AssertionError("a test tried to hit live web search")
+
+    monkeypatch.setattr(router.search_service, "run", blocked)
+
+
 @pytest.fixture
 def llm(monkeypatch):
     """Record LLM calls and return a successful answer."""
@@ -52,12 +61,19 @@ def test_low_confidence_translate_miss_defers_to_llm(monkeypatch, llm):
     assert llm, "the LLM was never consulted"
 
 
-def test_low_confidence_wikipedia_miss_defers_to_llm(monkeypatch, llm):
+def test_low_confidence_wikipedia_miss_is_rescued(monkeypatch, llm):
+    """WIKIPEDIA rescues via grounded search - see test_wikipedia_fallback.py."""
+    grounded = "GPT-6 Astra does not appear in any source."
     monkeypatch.setitem(
         router.ROUTES, "WIKIPEDIA", fail_with("Wikipedia lookup failed. Please try again."),
     )
+    monkeypatch.setitem(
+        router._FALLBACK_HANDLER, "WIKIPEDIA",
+        lambda t, e=None, c=None: SkillResponse(speech=grounded),
+    )
     result = router.route("WIKIPEDIA", "tell me about GPT-6 Astra", [], None, confidence=0.50)
-    assert result.speech == LLM_ANSWER
+    assert result.speech == grounded
+    assert not llm, "factual lookups must prefer a grounded source over the model"
 
 
 # --------------------------------------------------------------------------- #
@@ -100,8 +116,8 @@ def test_crashing_skill_also_falls_back(monkeypatch, llm):
     def boom(text, entities, context):
         raise RuntimeError("skill exploded")
 
-    monkeypatch.setitem(router.ROUTES, "WIKIPEDIA", boom)
-    result = router.route("WIKIPEDIA", "tell me about x", [], None, confidence=0.4)
+    monkeypatch.setitem(router.ROUTES, "DICTIONARY", boom)
+    result = router.route("DICTIONARY", "define x", [], None, confidence=0.4)
     assert result.speech == LLM_ANSWER
 
 
@@ -110,25 +126,25 @@ def test_crashing_skill_without_fallback_still_returns_a_reply(monkeypatch):
     def boom(text, entities, context):
         raise RuntimeError("skill exploded")
 
-    monkeypatch.setitem(router.ROUTES, "WIKIPEDIA", boom)
+    monkeypatch.setitem(router.ROUTES, "DICTIONARY", boom)
     monkeypatch.setattr(
         router.llm_service, "chat",
         lambda *a, **k: SkillResponse.error("no key configured"),
     )
-    result = router.route("WIKIPEDIA", "tell me about x", [], None, confidence=0.4)
+    result = router.route("DICTIONARY", "define x", [], None, confidence=0.4)
     assert result.success is False
     assert result.speech
 
 
-def test_skill_message_wins_when_llm_also_fails(monkeypatch):
+def test_skill_message_wins_when_fallback_also_fails(monkeypatch):
     """The skill's error is more specific than 'model unreachable'."""
-    monkeypatch.setitem(router.ROUTES, "WIKIPEDIA", fail_with("Wikipedia lookup failed."))
+    monkeypatch.setitem(router.ROUTES, "DICTIONARY", fail_with("No definition found."))
     monkeypatch.setattr(
         router.llm_service, "chat",
         lambda *a, **k: SkillResponse.error("My language model is unreachable."),
     )
-    result = router.route("WIKIPEDIA", "tell me about x", [], None, confidence=0.4)
-    assert result.speech == "Wikipedia lookup failed."
+    result = router.route("DICTIONARY", "define x", [], None, confidence=0.4)
+    assert result.speech == "No definition found."
 
 
 def test_default_confidence_preserves_old_behaviour(monkeypatch, llm):

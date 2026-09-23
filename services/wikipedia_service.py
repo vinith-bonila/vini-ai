@@ -32,8 +32,15 @@ def run(text: str, entities, context=None) -> SkillResponse:
             data={"title": page.title, "query": query},
         )
     except wikipedia.DisambiguationError as exc:
-        options = ", ".join(exc.options[:5])
-        return SkillResponse(speech=f"That could mean several things: {options}. Which did you mean?")
+        # success=False so the caller can try a better source. A bare
+        # disambiguation list is usually unhelpful: "IIPE" offers chemistry and
+        # medical terms while the article actually wanted is not among them.
+        options = ", ".join(exc.options[:8])
+        return SkillResponse(
+            speech=f"'{query}' could mean several things: {options}. Which did you mean?",
+            data={"disambiguation": True, "options": exc.options[:8]},
+            success=False,
+        )
     except wikipedia.PageError:
         return SkillResponse.error(f"I couldn't find a Wikipedia article for '{query}'.")
     except Exception as exc:  # noqa: BLE001

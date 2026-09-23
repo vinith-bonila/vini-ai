@@ -67,6 +67,15 @@ ROUTES["GOODBYE"] = _goodbye
 #   GREETING / GOODBYE        - cannot fail
 _NO_LLM_FALLBACK = {"GENERAL_CHAT", "WEB_ANSWER", "OPEN_APP", "GREETING", "GOODBYE"}
 
+# Factual lookups fall back to grounded web search instead of a bare model
+# answer: asked about an entity it does not know, a model will invent a
+# plausible one ("IIPE" came back as a 2006 institute in the wrong state).
+# search_service degrades to the model itself, clearly labelled, if search is
+# unavailable, so this is never a dead end.
+_FALLBACK_HANDLER: dict[str, Handler] = {
+    "WIKIPEDIA": search_service.run,
+}
+
 
 def route(intent: str, text: str, entities, context, confidence: float = 1.0) -> SkillResponse:
     """Dispatch to a skill, falling back to the LLM on a low-confidence miss.
@@ -88,13 +97,18 @@ def route(intent: str, text: str, entities, context, confidence: float = 1.0) ->
         and intent not in _NO_LLM_FALLBACK
         and confidence < settings.skill_fallback_confidence
     ):
+        rescue = _FALLBACK_HANDLER.get(intent, llm_service.chat)
         logger.info(
-            "Skill %s failed at %.0f%% confidence; deferring to the LLM.",
-            intent, confidence * 100,
+            "Skill %s failed at %.0f%% confidence; deferring to %s.",
+            intent, confidence * 100, rescue.__module__,
         )
-        fallback = llm_service.chat(text, entities, context)
-        # Keep the skill's own message if the LLM cannot answer either - it is
-        # the more specific of the two.
+        try:
+            fallback = rescue(text, entities, context)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fallback for %s failed too: %s", intent, exc)
+            return response
+        # Keep the skill's own message if the fallback cannot answer either -
+        # it is the more specific of the two.
         if fallback.success:
             return fallback
 
