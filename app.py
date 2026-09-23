@@ -12,12 +12,22 @@ import streamlit as st
 
 from assistant.conversation import Conversation
 from assistant.dispatcher import handle
-from config import settings
 from speech.speech_to_text import TranscriptionError, transcribe
 from speech.text_to_speech import synthesize
-from ui import brand_header, inject_css, render_nlu_panels, status_pill
+from ui import (
+    about_section,
+    assistant_bubble,
+    brand_header,
+    hero_headline,
+    inject_css,
+    mic_caption,
+    render_nlu_panels,
+    render_voice_core,
+    sidebar_nav,
+    user_bubble,
+)
 
-st.set_page_config(page_title="VINI AI", page_icon="\U0001F399\uFE0F", layout="wide")
+st.set_page_config(page_title="VINI AI", page_icon="\U0001F399️", layout="wide")
 inject_css()
 
 # --------------------------------------------------------------------------- #
@@ -29,7 +39,7 @@ _defaults = {
     "status": "idle",
     "last_audio_hash": None,
     "speak_replies": True,
-    "pending_text": "",
+    "_pending_audio": None,
 }
 for key, val in _defaults.items():
     if key not in st.session_state:
@@ -39,23 +49,13 @@ if st.session_state.conversation is None:
 
 conv: Conversation = st.session_state.conversation
 
-
-def process(text: str) -> None:
-    text = (text or "").strip()
-    if not text:
-        return
-    st.session_state.status = "thinking"
-    result = handle(text, conv)
-    st.session_state.last_result = result
-    st.session_state.status = "idle"
-
-
-def _submit_text() -> None:
-    """Enter in the text box: queue the message and clear the field."""
-    typed = st.session_state.get("text_box", "")
-    if typed.strip():
-        st.session_state.pending_text = typed
-    st.session_state.text_box = ""
+SUGGESTIONS = [
+    "Play Believer by Imagine Dragons",
+    "Translate good morning to French",
+    "What is 18% of 4500?",
+    "Weather in Mumbai",
+    "Who is Alan Turing?",
+]
 
 
 def _speech_lead(text: str, limit: int = 320) -> str:
@@ -68,71 +68,111 @@ def _speech_lead(text: str, limit: int = 320) -> str:
     return (lead or text)[:limit]
 
 
+def process(text: str, core_ph) -> None:
+    """Run one utterance through the real pipeline.
+
+    The Voice Intelligence Core is redrawn into `core_ph` right before each
+    phase's actual work starts, so what the UI shows always matches the work
+    genuinely in flight - never a faked or pre-scripted animation.
+    """
+    text = (text or "").strip()
+    if not text:
+        return
+
+    st.session_state.status = "understanding"
+    render_voice_core(core_ph, "understanding")
+
+    st.session_state.status = "thinking"
+    render_voice_core(core_ph, "thinking")
+    result = handle(text, conv)
+    st.session_state.last_result = result
+
+    audio_bytes = None
+    if st.session_state.speak_replies and result.response.success:
+        # Always speak English by default; only a translation is spoken in
+        # its target language, so replies never come out in a misdetected voice.
+        tts_lang = "en"
+        if result.nlu.intent == "TRANSLATE":
+            tts_lang = result.response.data.get("target_code", "en")
+        st.session_state.status = "speaking"
+        render_voice_core(core_ph, "speaking")
+        audio_bytes = synthesize(_speech_lead(result.response.speech), lang=tts_lang)
+
+    st.session_state.status = "idle"
+    if not audio_bytes:
+        render_voice_core(core_ph, "idle")
+    st.session_state["_pending_audio"] = audio_bytes
+
+
 # --------------------------------------------------------------------------- #
 # Sidebar
 # --------------------------------------------------------------------------- #
+sidebar_nav()
 with st.sidebar:
-    brand_header()
     st.divider()
-    st.markdown("**Assistant status**")
-    st.markdown(status_pill(st.session_state.status), unsafe_allow_html=True)
-    st.divider()
-
     st.session_state.speak_replies = st.toggle("Speak replies aloud", value=st.session_state.speak_replies)
-    st.caption(
-        f"LLM: {'connected' if settings.openai_enabled else 'offline (structured skills only)'}"
-    )
-    st.caption(f"STT: {settings.stt_backend}  \u00b7  TTS: {settings.tts_backend}")
-
     st.divider()
-    if st.button("Clear conversation", width='stretch'):
+
+    st.caption(f"Current session · {len(conv.turns)} turns")
+    if st.button("Clear conversation", width="stretch"):
         conv.clear()
         st.session_state.last_result = None
+        st.session_state["_pending_audio"] = None
         st.rerun()
-    st.caption(f"Session `{conv.session_id}` \u00b7 {len(conv.turns)} turns")
 
 # --------------------------------------------------------------------------- #
-# Header
+# Hero + Voice Intelligence Core
 # --------------------------------------------------------------------------- #
 brand_header()
-st.write(
-    "Ask by text or voice. VINI AI understands intent through NLP - not keyword "
-    "matching - and shows its full analysis for every request."
-)
+hero_headline()
+
+core_ph = st.empty()
+render_voice_core(core_ph, st.session_state.status)
 
 # --------------------------------------------------------------------------- #
-# Input row: text field + voice button, side by side
+# Mic input
 # --------------------------------------------------------------------------- #
-text_col, mic_col = st.columns([4, 1.3], vertical_alignment="bottom")
-with text_col:
-    st.text_input(
-        "Message",
-        key="text_box",
-        placeholder="Type a message to VINI AI...",
-        label_visibility="collapsed",
-        on_change=_submit_text,
-    )
-with mic_col:
-    audio = st.audio_input("Voice", label_visibility="collapsed") if hasattr(st, "audio_input") else None
+mic_caption(st.session_state.status)
+audio = st.audio_input("Voice", label_visibility="collapsed") if hasattr(st, "audio_input") else None
 
-st.caption(
-    "Try: *play Believer by Imagine Dragons* \u00b7 *translate good morning to French* "
-    "\u00b7 *what's 18% of 4500* \u00b7 *weather in Mumbai* \u00b7 *who is Alan Turing*"
-)
+# --------------------------------------------------------------------------- #
+# Command bar (secondary text input)
+# --------------------------------------------------------------------------- #
+with st.container(key="command_bar"):
+    with st.form(key="command_bar_form", clear_on_submit=True, border=False):
+        col_text, col_send = st.columns([6, 1], vertical_alignment="bottom")
+        with col_text:
+            typed = st.text_input(
+                "Message",
+                placeholder="Type a message to VINI.AI...",
+                label_visibility="collapsed",
+            )
+        with col_send:
+            submitted = st.form_submit_button("Send", width="stretch")
 
-# Handle a submitted text message.
-if st.session_state.pending_text:
-    queued = st.session_state.pending_text
-    st.session_state.pending_text = ""
-    process(queued)
+# --------------------------------------------------------------------------- #
+# Suggestions
+# --------------------------------------------------------------------------- #
+with st.container(key="suggestions"):
+    clicked_suggestion = None
+    for suggestion in SUGGESTIONS:
+        if st.button(suggestion, key=f"sugg_{suggestion}"):
+            clicked_suggestion = suggestion
 
-# Handle a new voice recording.
-if audio is not None:
+# --------------------------------------------------------------------------- #
+# Route whichever input fired this run through the real pipeline
+# --------------------------------------------------------------------------- #
+if submitted and typed.strip():
+    process(typed, core_ph)
+elif clicked_suggestion:
+    process(clicked_suggestion, core_ph)
+elif audio is not None:
     audio_bytes = audio.getvalue()
     digest = hashlib.md5(audio_bytes).hexdigest()
     if digest != st.session_state.last_audio_hash:
         st.session_state.last_audio_hash = digest
         st.session_state.status = "listening"
+        render_voice_core(core_ph, "listening")
         spoken, error = "", None
         try:
             spoken = transcribe(audio_bytes)
@@ -140,35 +180,37 @@ if audio is not None:
             error = str(exc)
         if spoken:
             st.toast(f"Heard: {spoken}")
-            process(spoken)
-        elif error:
-            st.error(f"Transcription failed: {error}")
+            process(spoken, core_ph)
         else:
-            st.warning("I heard silence - try speaking a little longer.")
+            st.session_state.status = "idle"
+            render_voice_core(core_ph, "idle")
+            if error:
+                st.error(f"Transcription failed: {error}")
+            else:
+                st.warning("I heard silence - try speaking a little longer.")
 
 # --------------------------------------------------------------------------- #
 # Latest response + NLP transparency panels
 # --------------------------------------------------------------------------- #
 result = st.session_state.last_result
 if result is not None:
+    st.divider()
     left, right = st.columns([1.3, 1])
     with left:
         st.markdown("#### Response")
-        with st.chat_message("assistant"):
-            st.write(result.response.speech)
-            for link in result.response.links:
-                st.link_button(link.label, link.url)
-        if st.session_state.speak_replies and result.response.success:
-            # Always speak English by default; only a translation is spoken in
-            # its target language, so replies never come out in a misdetected voice.
-            tts_lang = "en"
-            if result.nlu.intent == "TRANSLATE":
-                tts_lang = result.response.data.get("target_code", "en")
-            audio_bytes = synthesize(_speech_lead(result.response.speech), lang=tts_lang)
-            if audio_bytes:
-                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+        last_turn = conv.last_turn
+        if last_turn is not None:
+            user_bubble(last_turn.user_text)
+        assistant_bubble(result.response.speech)
+        for link in result.response.links:
+            st.link_button(link.label, link.url)
+
+        pending_audio = st.session_state.get("_pending_audio")
+        if pending_audio:
+            st.audio(pending_audio, format="audio/mp3", autoplay=True)
+        st.session_state["_pending_audio"] = None
     with right:
-        st.markdown("#### NLP analysis")
+        st.markdown("#### Intent Analysis")
         render_nlu_panels(result)
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +220,11 @@ if conv.turns:
     st.divider()
     st.markdown("#### Conversation")
     for turn in conv.turns:
-        with st.chat_message("user"):
-            st.write(turn.user_text)
-        with st.chat_message("assistant"):
-            st.write(turn.assistant_text)
+        user_bubble(turn.user_text)
+        assistant_bubble(turn.assistant_text)
+
+# --------------------------------------------------------------------------- #
+# Explainer - last, so the core and mic own the top of the screen
+# --------------------------------------------------------------------------- #
+st.divider()
+about_section()

@@ -1,20 +1,602 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-h1, h2, h3, .vini-brand { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.01em; }
+/* ========================================================================
+   DESIGN TOKENS
+   ======================================================================== */
+:root {
+  --bg-0: #07080D;
+  --bg-1: #0B0D14;
+  --bg-card: rgba(255,255,255,0.035);
+  --bg-card-hover: rgba(255,255,255,0.055);
+  --border: rgba(248,250,252,0.09);
+  --border-soft: rgba(248,250,252,0.05);
 
-/* Brand lockup - monochrome */
-.vini-brand { font-size: 2.2rem; font-weight: 700; margin-bottom: 0; color: #FFFFFF; }
-.vini-brand .dot { color: #FFFFFF; }
-.vini-tag { color: #8A8A8A; font-size: 0.95rem; margin-top: -4px; }
+  --indigo: #6366F1;
+  --violet: #8B5CF6;
+  --cyan: #22D3EE;
+  --magenta: #D946EF;
+  --success: #34D399;
 
-/* Machine-readout styling: NLP internals read as instrument output */
-.readout, .stCode, code { font-family: 'JetBrains Mono', monospace !important; }
-.pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:0.75rem;
-        font-weight:600; font-family:'JetBrains Mono',monospace; }
-.pill-intent { background:rgba(255,255,255,0.10); color:#FFFFFF; border:1px solid rgba(255,255,255,0.35); }
-.pill-live   { background:rgba(255,255,255,0.16); color:#FFFFFF; border:1px solid rgba(255,255,255,0.55); }
-.pill-idle   { background:rgba(255,255,255,0.05); color:#9A9A9A; border:1px solid rgba(255,255,255,0.18); }
+  --text: #F8FAFC;
+  --muted: #94A3B8;
+  --muted-2: #5B6478;
 
-/* Confidence meter - white to grey */
-.meter { height:8px; border-radius:6px; background:#222222; overflow:hidden; margin-top:6px; }
-.meter > span { display:block; height:100%; background:linear-gradient(90deg,#FFFFFF,#7A7A7A); }
+  --grad-core: linear-gradient(135deg, var(--indigo), var(--violet) 55%, var(--cyan));
+  --grad-text: linear-gradient(90deg, #C7D2FE, #E9D5FF 45%, #A5F3FC);
+
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --fast: 140ms;
+  --normal: 240ms;
+  --slow: 420ms;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+/* ========================================================================
+   APP SHELL
+   ======================================================================== */
+html, body, [data-testid="stAppViewContainer"] {
+  background:
+    radial-gradient(ellipse 900px 500px at 18% -8%, rgba(99,102,241,0.16), transparent 60%),
+    radial-gradient(ellipse 800px 480px at 100% 0%, rgba(34,211,238,0.10), transparent 55%),
+    radial-gradient(ellipse 700px 600px at 50% 110%, rgba(139,92,246,0.10), transparent 55%),
+    var(--bg-0) !important;
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+[data-testid="stHeader"] { background: transparent !important; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+[data-testid="stDecoration"] { display: none; }
+[data-testid="stSidebarNav"] { display: none; }
+[data-testid="stStatusWidget"] { display: none; }
+
+/* The header is absolutely positioned and 60px tall, so the main column only
+   needs to clear that - Streamlit's default 6rem pushes the core below the fold. */
+[data-testid="stMain"] .block-container {
+  padding-top: 4.2rem;
+  max-width: 1180px;
+}
+
+/* Tighter vertical rhythm in the main column so the core + mic stay in view. */
+[data-testid="stMain"] [data-testid="stVerticalBlock"] { gap: 0.6rem; }
+.st-key-suggestions { gap: 0.45rem !important; }
+
+h1, h2, h3, h4, .vini-brand, .vc-title { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.01em; }
+p, span, div, label { font-family: 'Inter', sans-serif; }
+.readout, .stCode, code, pre, .mono { font-family: 'JetBrains Mono', monospace !important; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(248,250,252,0.12); border-radius: 999px; }
+
+/* ========================================================================
+   BRAND / HERO
+   ======================================================================== */
+.vini-brand {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0;
+  background: var(--grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+.vini-brand .dot { color: var(--cyan); -webkit-text-fill-color: var(--cyan); }
+.vini-tag {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-top: -2px;
+}
+
+.hero-wrap { text-align: center; padding: 0.2rem 0 0; }
+.hero-headline {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0.3rem 0 0.1rem;
+  color: var(--text);
+}
+.hero-sub {
+  color: var(--muted);
+  font-size: 0.94rem;
+  max-width: 620px;
+  margin: 1.4rem auto 0;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.pipeline-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0.3rem;
+}
+.pipeline-flow .step {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+}
+.pipeline-flow .arrow { color: var(--muted-2); font-size: 0.85rem; }
+
+.disclaimer-note {
+  color: var(--muted-2);
+  font-size: 0.74rem;
+  text-align: center;
+  margin-top: 0.6rem;
+  opacity: 0.85;
+}
+
+/* ========================================================================
+   VOICE INTELLIGENCE CORE
+   ======================================================================== */
+.vc-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 0 0.4rem;
+  perspective: 900px;
+}
+
+.vc {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vc-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(139,92,246,0.22);
+  transform-style: preserve-3d;
+}
+.vc-ring-1 { width: 100%; height: 100%; animation: vc-spin-slow 22s linear infinite; }
+.vc-ring-2 { width: 82%; height: 82%; border-color: rgba(34,211,238,0.16); animation: vc-spin-slow-rev 30s linear infinite; }
+.vc-ring-3 { width: 64%; height: 64%; border-color: rgba(217,70,239,0.14); animation: vc-spin-slow 40s linear infinite; }
+
+@keyframes vc-spin-slow { from { transform: rotateZ(0deg) rotateX(8deg); } to { transform: rotateZ(360deg) rotateX(8deg); } }
+@keyframes vc-spin-slow-rev { from { transform: rotateZ(360deg) rotateX(-6deg); } to { transform: rotateZ(0deg) rotateX(-6deg); } }
+
+.vc-particles { position: absolute; inset: 0; }
+.vc-particles .orbit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: vc-spin-slow 14s linear infinite;
+}
+.vc-particles .orbit i {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px 1px rgba(34,211,238,0.7);
+  opacity: 0.55;
+}
+.vc-particles .orbit.o2 { animation-duration: 19s; animation-direction: reverse; }
+.vc-particles .orbit.o2 i { background: var(--magenta); box-shadow: 0 0 6px 1px rgba(217,70,239,0.6); top: 10%; }
+.vc-particles .orbit.o3 { animation-duration: 26s; }
+.vc-particles .orbit.o3 i { background: var(--violet); box-shadow: 0 0 6px 1px rgba(139,92,246,0.6); top: 16%; left: 46%; }
+
+.vc-orb {
+  position: relative;
+  width: 46%;
+  height: 46%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 34% 28%, rgba(148,163,255,0.30), rgba(11,13,20,0.05) 60%),
+              linear-gradient(145deg, rgba(99,102,241,0.22), rgba(139,92,246,0.12) 45%, rgba(34,211,238,0.10));
+  border: 1px solid rgba(199,210,254,0.28);
+  box-shadow: 0 0 40px 6px rgba(99,102,241,0.18), inset 0 0 30px rgba(139,92,246,0.10);
+  animation: vc-breathe 4.2s var(--ease) infinite;
+  transition: box-shadow var(--slow) var(--ease), background var(--slow) var(--ease);
+}
+@keyframes vc-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+
+.vc-wave {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  opacity: 0;
+  transition: opacity var(--normal) var(--ease);
+}
+.vc-wave span {
+  width: 3px;
+  border-radius: 3px;
+  background: var(--cyan);
+  height: 6px;
+  animation: vc-wave-idle 2.6s var(--ease) infinite;
+}
+.vc-wave span:nth-child(1) { animation-delay: 0s; }
+.vc-wave span:nth-child(2) { animation-delay: 0.12s; }
+.vc-wave span:nth-child(3) { animation-delay: 0.24s; }
+.vc-wave span:nth-child(4) { animation-delay: 0.36s; }
+.vc-wave span:nth-child(5) { animation-delay: 0.48s; }
+@keyframes vc-wave-idle { 0%,100% { height: 5px; } 50% { height: 9px; } }
+@keyframes vc-wave-live { 0%,100% { height: 5px; } 50% { height: 22px; } }
+
+.vc-label {
+  position: absolute;
+  bottom: -28px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  opacity: 0.9;
+}
+.vc-label .dot { color: var(--cyan); }
+
+.vc-status {
+  margin-top: 38px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  transition: color var(--normal) var(--ease);
+  min-height: 1.4em;
+}
+
+/* state: idle (default styling above already represents idle) */
+
+/* state: listening */
+.vc[data-state="listening"] .vc-ring-1 { border-color: rgba(34,211,238,0.55); animation-duration: 6s; }
+.vc[data-state="listening"] .vc-ring-2 { border-color: rgba(34,211,238,0.35); animation-duration: 8s; }
+.vc[data-state="listening"] .vc-orb {
+  animation: vc-pulse-listen 1.3s var(--ease) infinite;
+  background: radial-gradient(circle at 34% 28%, rgba(165,243,252,0.34), rgba(11,13,20,0.05) 60%),
+              linear-gradient(145deg, rgba(34,211,238,0.28), rgba(99,102,241,0.16));
+  box-shadow: 0 0 55px 10px rgba(34,211,238,0.30), inset 0 0 30px rgba(34,211,238,0.14);
+}
+.vc[data-state="listening"] .vc-wave { opacity: 1; }
+.vc[data-state="listening"] .vc-wave span { animation: vc-wave-live 0.9s var(--ease) infinite; background: var(--cyan); }
+.vc[data-state="listening"] .vc-status { color: var(--cyan); }
+@keyframes vc-pulse-listen { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+
+/* state: understanding */
+.vc[data-state="understanding"] .vc-ring-2 {
+  border: 2px dashed rgba(139,92,246,0.55);
+  animation: vc-spin-fast 1.8s linear infinite;
+}
+.vc[data-state="understanding"] .vc-orb {
+  background: radial-gradient(circle at 34% 28%, rgba(216,180,254,0.32), rgba(11,13,20,0.05) 60%),
+              linear-gradient(145deg, rgba(139,92,246,0.28), rgba(99,102,241,0.16));
+  box-shadow: 0 0 50px 8px rgba(139,92,246,0.28), inset 0 0 30px rgba(139,92,246,0.14);
+  animation: vc-breathe 1.6s var(--ease) infinite;
+}
+.vc[data-state="understanding"] .vc-status { color: var(--violet); }
+@keyframes vc-spin-fast { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* state: thinking */
+.vc[data-state="thinking"] .vc-ring-1 {
+  border: 2px dashed rgba(99,102,241,0.5);
+  animation: vc-spin-fast 2.4s linear infinite;
+}
+.vc[data-state="thinking"] .vc-ring-3 {
+  border: 1px dashed rgba(217,70,239,0.35);
+  animation: vc-spin-fast-rev 3.2s linear infinite;
+}
+.vc[data-state="thinking"] .vc-orb {
+  background: radial-gradient(circle at 34% 28%, rgba(199,210,254,0.32), rgba(11,13,20,0.05) 60%),
+              linear-gradient(145deg, rgba(99,102,241,0.30), rgba(217,70,239,0.14));
+  box-shadow: 0 0 50px 8px rgba(99,102,241,0.30), inset 0 0 30px rgba(99,102,241,0.14);
+  animation: vc-breathe 1.9s var(--ease) infinite;
+}
+.vc[data-state="thinking"] .vc-status { color: var(--indigo); }
+@keyframes vc-spin-fast-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+
+/* state: speaking */
+.vc[data-state="speaking"] .vc-orb {
+  animation: vc-pulse-speak 0.85s var(--ease) infinite;
+  background: radial-gradient(circle at 34% 28%, rgba(245,208,254,0.34), rgba(11,13,20,0.05) 60%),
+              linear-gradient(145deg, rgba(217,70,239,0.26), rgba(34,211,238,0.18));
+  box-shadow: 0 0 55px 10px rgba(217,70,239,0.30), inset 0 0 30px rgba(217,70,239,0.14);
+}
+.vc[data-state="speaking"] .vc-wave { opacity: 1; }
+.vc[data-state="speaking"] .vc-wave span { animation: vc-wave-live 0.6s var(--ease) infinite; background: var(--magenta); }
+.vc[data-state="speaking"] .vc-status { color: var(--magenta); }
+@keyframes vc-pulse-speak { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+/* ------------------------------------------------------------------- */
+/* Live processing stepper (VOICE -> TRANSCRIBE -> UNDERSTAND -> REASON -> RESPOND) */
+.vc-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  max-width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+.vc-steps .node {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  color: var(--muted-2);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  transition: all var(--normal) var(--ease);
+}
+.vc-steps .node.done { color: var(--cyan); border-color: rgba(34,211,238,0.35); background: rgba(34,211,238,0.06); }
+.vc-steps .node.active { color: var(--text); border-color: rgba(217,70,239,0.5); background: rgba(217,70,239,0.10); }
+.vc-steps .sep { color: var(--muted-2); font-size: 0.6rem; }
+
+/* ========================================================================
+   MIC CONTROL
+   ======================================================================== */
+.mic-caption {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0.35rem 0 0.3rem;
+}
+.mic-caption .glyph { color: var(--cyan); margin-right: 6px; }
+
+div[data-testid="stAudioInput"] {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 6px 10px;
+  transition: border-color var(--normal) var(--ease), background var(--normal) var(--ease);
+  max-width: 420px;
+  margin: 0 auto;
+}
+div[data-testid="stAudioInput"]:hover { border-color: rgba(139,92,246,0.4); background: var(--bg-card-hover); }
+
+/* ========================================================================
+   COMMAND BAR (text input)
+   ======================================================================== */
+.st-key-command_bar { max-width: 640px; margin: 0.6rem auto 0; }
+
+div[data-testid="stForm"] {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.st-key-command_bar div[data-testid="stTextInput"] input {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-pill) !important;
+  color: var(--text) !important;
+  padding: 0.7rem 1.1rem !important;
+  font-size: 0.92rem !important;
+  transition: border-color var(--normal) var(--ease), box-shadow var(--normal) var(--ease);
+}
+.st-key-command_bar div[data-testid="stTextInput"] input:focus {
+  border-color: rgba(99,102,241,0.55) !important;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.14) !important;
+}
+.st-key-command_bar div[data-testid="stTextInput"] > div { background: transparent !important; border: none !important; }
+
+/* ========================================================================
+   BUTTONS
+   ======================================================================== */
+.stButton > button, .stFormSubmitButton > button {
+  border-radius: var(--radius-pill) !important;
+  border: 1px solid var(--border) !important;
+  background: var(--bg-card) !important;
+  color: var(--text) !important;
+  font-weight: 500 !important;
+  transition: transform var(--fast) var(--ease), border-color var(--normal) var(--ease), background var(--normal) var(--ease) !important;
+}
+.stButton > button:hover, .stFormSubmitButton > button:hover {
+  border-color: rgba(139,92,246,0.55) !important;
+  background: var(--bg-card-hover) !important;
+  transform: translateY(-1px);
+}
+.stButton > button:active, .stFormSubmitButton > button:active { transform: translateY(0px) scale(0.98); }
+
+.stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
+  background: linear-gradient(135deg, var(--indigo), var(--violet)) !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+/* Suggestion pills row */
+.st-key-suggestions { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; gap: 0.45rem; justify-content: center; margin: 0.75rem 0 0.3rem; }
+.st-key-suggestions > div { width: auto !important; }
+.st-key-suggestions .stButton > button {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  padding: 0.35rem 0.85rem !important;
+  color: var(--muted) !important;
+}
+.st-key-suggestions .stButton > button:hover { color: var(--text) !important; }
+
+/* ========================================================================
+   PILLS / CHIPS / BADGES
+   ======================================================================== */
+.pill {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.03em;
+}
+.pill-intent { background: rgba(99,102,241,0.14); color: #C7D2FE; border: 1px solid rgba(99,102,241,0.38); }
+.pill-live   { background: rgba(34,211,238,0.14); color: #A5F3FC; border: 1px solid rgba(34,211,238,0.4); }
+.pill-idle   { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+.pill-success{ background: rgba(52,211,153,0.14); color: #A7F3D0; border: 1px solid rgba(52,211,153,0.4); }
+.pill-warn   { background: rgba(217,70,239,0.14); color: #F5D0FE; border: 1px solid rgba(217,70,239,0.4); }
+
+.chip {
+  display: inline-block;
+  padding: 3px 10px;
+  margin: 2px 4px 2px 0;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(139,92,246,0.10);
+  color: #DDD6FE;
+  border: 1px solid rgba(139,92,246,0.28);
+}
+
+/* Connection status dots (sidebar) */
+.status-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); margin: 4px 0; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.on { background: var(--success); box-shadow: 0 0 6px 1px rgba(52,211,153,0.6); }
+.status-dot.off { background: var(--muted-2); }
+.status-row .val { color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; }
+
+/* ========================================================================
+   METER
+   ======================================================================== */
+.meter { height: 7px; border-radius: 6px; background: rgba(255,255,255,0.06); overflow: hidden; margin-top: 6px; }
+.meter > span { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--indigo), var(--cyan)); transition: width var(--slow) var(--ease); }
+.meter-label { font-size: 0.78rem; color: var(--muted); }
+.meter-pct { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--text); }
+
+/* ========================================================================
+   CARDS
+   ======================================================================== */
+.vcard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.15rem;
+  transition: border-color var(--normal) var(--ease), background var(--normal) var(--ease);
+}
+.vcard:hover { border-color: rgba(139,92,246,0.3); }
+.vcard-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+  color: var(--text);
+}
+
+/* Intent Analysis readout */
+.intent-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.intent-engine { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--muted-2); }
+.stat-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.stat {
+  flex: 1 1 96px;
+  min-width: 96px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+}
+.stat-label { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.08em; color: var(--muted-2); }
+.stat-value { font-family: 'JetBrains Mono', monospace; font-size: 0.86rem; color: var(--text); margin-top: 2px; }
+.chip-row { margin-top: 0.6rem; }
+
+/* ========================================================================
+   CONVERSATION TIMELINE
+   ======================================================================== */
+.msg-row { display: flex; gap: 10px; margin: 10px 0; align-items: flex-start; animation: msg-in var(--slow) var(--ease); }
+@keyframes msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.msg-row.user { flex-direction: row-reverse; }
+.msg-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; margin-top: 2px;
+}
+.msg-avatar.user { background: rgba(34,211,238,0.14); border: 1px solid rgba(34,211,238,0.35); }
+.msg-avatar.assistant { background: linear-gradient(135deg, var(--indigo), var(--violet)); }
+.msg-body { max-width: 80%; min-width: 0; }
+.msg-bubble {
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.msg-row.user .msg-bubble { background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.22); border-top-right-radius: 4px; }
+.msg-row.assistant .msg-bubble { background: var(--bg-card); border: 1px solid var(--border); border-top-left-radius: 4px; }
+.msg-name { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; color: var(--muted-2); letter-spacing: 0.06em; margin-bottom: 3px; }
+.msg-row.user .msg-name { text-align: right; }
+
+/* ========================================================================
+   EXPANDER / WIDGET RESTYLES
+   ======================================================================== */
+div[data-testid="stExpander"] {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+div[data-testid="stExpander"] summary { font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; }
+
+div[data-testid="stMetric"] {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.9rem 0.5rem;
+}
+div[data-testid="stMetricLabel"] { color: var(--muted) !important; }
+
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, var(--bg-1), var(--bg-0)) !important;
+  border-right: 1px solid var(--border-soft);
+}
+[data-testid="stSidebar"] hr { border-color: var(--border-soft); }
+
+.sidebar-nav-link { text-decoration: none; }
+div[data-testid="stSidebar"] div[data-testid="stPageLink"] a {
+  border-radius: var(--radius-sm);
+  transition: background var(--normal) var(--ease);
+}
+div[data-testid="stSidebar"] div[data-testid="stPageLink"] a:hover { background: var(--bg-card); }
+
+/* ========================================================================
+   RESPONSIVE
+   ======================================================================== */
+/* Short viewports (laptops): keep the core + mic above the fold. */
+@media (max-height: 800px) {
+  .vc { width: 168px; height: 168px; }
+  .vc-stage { padding: 0.4rem 0 0.3rem; }
+  .vc-status { margin-top: 32px; }
+  .vc-steps { margin-top: 0.45rem; }
+  .hero-headline { font-size: 1.28rem; }
+}
+
+@media (max-width: 768px) {
+  .vc { width: 156px; height: 156px; }
+  .vc-status { margin-top: 32px; }
+  .hero-headline { font-size: 1.18rem; }
+  .vini-brand { font-size: 1.5rem; }
+  .msg-body { max-width: 88%; }
+  .pipeline-flow .step { font-size: 0.64rem; padding: 4px 8px; }
+  .vc-steps { font-size: 0.58rem; }
+  .vc-steps .node { padding: 3px 7px; }
+}
