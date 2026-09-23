@@ -72,7 +72,7 @@ flowchart TB
         WX[Weather]
         CALC[Calculator / Units]
         UTIL[Time / Date / Joke / Dict / News]
-        LLM[OpenAI Chat]
+        LLM[LLM Chat<br/>Groq / OpenAI]
     end
     DB[(SQLite turn log)]
     HOME --> STT --> DISP
@@ -113,22 +113,58 @@ source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm   # only if the wheel install is skipped
 
-cp .env.example .env              # optional - add your OpenAI key
+cp .env.example .env              # then paste a Groq key into OPENAI_API_KEY
 streamlit run app.py
 ```
 
 Open http://localhost:8501. The assistant works immediately for structured
 skills (music, translation, weather, calculator, Wikipedia, time, jokes, and
-more). Add an OpenAI key in `.env` or the Settings page to enable open-ended
+more). Add a key in `.env` or the Settings page to enable open-ended
 conversation and hosted Whisper voice.
 
 ## Configuration
 
-All behaviour is driven by environment variables (see `.env.example`). Key ones:
+All behaviour is driven by environment variables (see `.env.example`).
+
+### LLM provider
+
+The app talks to any OpenAI-compatible endpoint. It ships configured for
+**Groq**, whose free tier and very fast inference suit a voice assistant,
+where round-trip latency is what makes the interaction feel live. Grab a key
+at [console.groq.com/keys](https://console.groq.com/keys).
+
+These defaults are compiled into `config.py`, so a fresh checkout with **no
+`.env` at all** still resolves to Groq — the running app always matches this
+table.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OPENAI_API_KEY` | *(empty)* | Enables chat, hosted Whisper STT, OpenAI TTS |
+| `OPENAI_API_KEY` | *(empty)* | Enables chat and hosted Whisper STT |
+| `OPENAI_BASE_URL` | `https://api.groq.com/openai/v1` | Endpoint for every LLM/STT call |
+| `OPENAI_CHAT_MODEL` | `openai/gpt-oss-20b` | Must be served by the endpoint above |
+| `OPENAI_STT_MODEL` | `whisper-large-v3` | Groq's Whisper; OpenAI uses `whisper-1` |
+
+The key and the base URL have to agree. A Groq key sent to OpenAI's endpoint
+returns 401, which the UI reports as the model being unreachable — the
+sidebar shows the active `model @ host` so a mismatch is visible at a glance.
+
+Leaving `OPENAI_BASE_URL` blank does **not** select OpenAI; blank and
+whitespace-only values fall back to the Groq default. Switching providers is
+explicit:
+
+```bash
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o-mini
+OPENAI_STT_MODEL=whisper-1
+```
+
+Note `OPENAI_BASE_URL` applies to hosted STT and TTS too. Keep
+`TTS_BACKEND=gtts` (the default) on Groq, which serves no OpenAI TTS models.
+
+### Everything else
+
+| Variable | Default | Purpose |
+|---|---|---|
 | `USE_EMBEDDINGS` | `false` | Switch intent model to sentence-transformers |
 | `USE_HF_SENTIMENT` | `false` | Switch sentiment to a transformer model |
 | `STT_BACKEND` | `openai` | `openai` (hosted) or `local` (faster-whisper) |
@@ -136,21 +172,33 @@ All behaviour is driven by environment variables (see `.env.example`). Key ones:
 | `INTENT_CONFIDENCE_FLOOR` | `0.28` | Below this, requests defer to the LLM |
 | `ALLOW_LOCAL_SYSTEM_SKILLS` | `false` | Allow opening desktop apps (local only) |
 
+The NLP itself — intent classification, entity extraction, sentiment, and the
+dependency parse — runs locally via spaCy, scikit-learn and VADER. It does not
+depend on the provider, which only serves open-ended chat and web-answer
+synthesis.
+
 ## Deploy to Streamlit Community Cloud
 
 1. Push this repo to GitHub.
 2. On [share.streamlit.io](https://share.streamlit.io), create an app pointing
    at `app.py`.
-3. In **Advanced settings -> Secrets**, add your key:
+3. In **Advanced settings -> Secrets**, add your key and endpoint:
    ```toml
-   OPENAI_API_KEY = "sk-..."
+   OPENAI_API_KEY = "gsk_..."
+   OPENAI_BASE_URL = "https://api.groq.com/openai/v1"
+   OPENAI_CHAT_MODEL = "openai/gpt-oss-20b"
+   OPENAI_STT_MODEL = "whisper-large-v3"
    ```
+   The base URL matters: without it the key goes to OpenAI and every reply
+   comes back as "unreachable".
 4. Deploy. The spaCy model installs from the wheel pinned in
    `requirements.txt`, so no runtime download is needed.
 
-**Deployment notes.** Voice input uses the browser microphone
-(`st.audio_input`) and replies play back as audio in the browser, so the voice
-loop works on a headless server. Desktop-only skills (opening local apps) are
+**Deployment notes.** Voice input uses the browser microphone through a custom
+component that records, watches the live input level, and stops on its own once
+you finish speaking; replies play back as audio in the browser, so the voice
+loop works on a headless server. Note that browsers only grant microphone
+access on `https://` or `localhost`, so a hosted deployment needs TLS. Desktop-only skills (opening local apps) are
 disabled in hosted mode by design and clearly say so. The default intent model
 (TF-IDF) and sentiment model (VADER) need no model downloads, keeping the app
 inside free-tier memory; the embedding and transformer backends are opt-in for

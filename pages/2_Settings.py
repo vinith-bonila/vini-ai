@@ -9,7 +9,7 @@ import os
 
 import streamlit as st
 
-from config import settings
+from config import DEFAULT_BASE_URL, OPENAI_BASE_URL, settings
 from ui import brand_header, connection_status, inject_css, sidebar_nav
 
 st.set_page_config(page_title="VINI AI · Settings", page_icon="⚙️", layout="wide")
@@ -42,8 +42,15 @@ with st.form("settings"):
     st.divider()
     st.markdown("<div class='vcard-title'>AI</div>", unsafe_allow_html=True)
     api_key = st.text_input(
-        "OpenAI API key", value="", type="password",
-        placeholder="sk-... (leave blank to keep current)",
+        "API key", value="", type="password",
+        placeholder="sk-... / gsk-... (leave blank to keep current)",
+    )
+    base_url = st.text_input(
+        "API base URL", value=settings.openai_base_url,
+        placeholder=DEFAULT_BASE_URL,
+        help="Any OpenAI-compatible endpoint. Must match the key: a Groq key "
+             f"returns 401 against OpenAI's endpoint. Blank resets to the "
+             f"default ({DEFAULT_BASE_URL}); for OpenAI use {OPENAI_BASE_URL}.",
     )
     chat_model = st.text_input("Chat model", value=settings.openai_chat_model)
     col2 = st.columns(2)
@@ -61,6 +68,12 @@ with st.form("settings"):
     if st.form_submit_button("Apply for this session", width="stretch"):
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
+        if base_url.strip():
+            os.environ["OPENAI_BASE_URL"] = base_url.strip()
+        else:
+            # Removed rather than blanked so it resolves to the built-in
+            # default instead of an empty base URL.
+            os.environ.pop("OPENAI_BASE_URL", None)
         os.environ["OPENAI_CHAT_MODEL"] = chat_model
         os.environ["STT_BACKEND"] = stt
         os.environ["TTS_BACKEND"] = tts

@@ -7,9 +7,9 @@ so the app has a real data layer rather than in-memory-only state.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Iterator
 
 import pandas as pd
 

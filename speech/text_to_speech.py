@@ -32,7 +32,7 @@ def _gtts(text: str, lang: str) -> bytes:
 def _openai_tts(text: str) -> bytes:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(**settings.openai_client_kwargs)
     resp = client.audio.speech.create(model=settings.openai_tts_model, voice="alloy", input=text)
     return resp.read()
 

@@ -2,9 +2,15 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
+
+# Anything that looks like an API key, so a failure reason shown in the UI (and
+# stored in the turn log) can never carry a credential.
+_SECRET_RE = re.compile(r"\b(?:sk|gsk|xai|pk)-[A-Za-z0-9_\-]{8,}", re.I)
 
 
 @contextmanager
@@ -35,3 +41,18 @@ def safe_json(value: Any) -> str:
 def truncate(text: str, limit: int = 280) -> str:
     text = (text or "").strip()
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"
+
+
+def failure_reason(exc: Exception, limit: int = 140) -> str:
+    """A short, secret-free description of why a call failed.
+
+    Surfaced in the UI so 'unreachable' is diagnosable (a 401 means the key or
+    base URL is wrong; a timeout means the network is). Redacted because the
+    reply text is also written to the turn log.
+    """
+    detail = " ".join(str(exc).split())
+    detail = _SECRET_RE.sub("[redacted]", detail)
+    name = type(exc).__name__
+    if not detail:
+        return name
+    return truncate(f"{name}: {detail}", limit)

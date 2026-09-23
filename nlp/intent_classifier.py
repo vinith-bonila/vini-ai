@@ -14,7 +14,7 @@ Design goals:
 from __future__ import annotations
 
 import math
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -92,7 +92,7 @@ class IntentClassifier:
         from rapidfuzz import fuzz
 
         best: dict[str, float] = {}
-        for label, example in zip(self._labels, self._corpus):
+        for label, example in zip(self._labels, self._corpus, strict=True):
             score = fuzz.token_set_ratio(text, example) / 100.0
             if score > best.get(label, 0.0):
                 best[label] = score
@@ -112,7 +112,7 @@ class IntentClassifier:
         try:
             sims = self._similarities(text)
             per_intent: dict[str, float] = {}
-            for label, sim in zip(self._labels, sims):
+            for label, sim in zip(self._labels, sims, strict=True):
                 if sim > per_intent.get(label, -1.0):
                     per_intent[label] = float(sim)
         except Exception as exc:  # noqa: BLE001

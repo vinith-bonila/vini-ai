@@ -126,7 +126,7 @@ def handle(text: str, conversation: Conversation) -> AssistantResult:
         if final_intent != nlu.intent:
             logger.debug("Intent override: %s -> %s (%r)", nlu.intent, final_intent, text)
             nlu.intent = final_intent
-        response = route(nlu.intent, nlu.text, nlu.entities, conversation)
+        response = route(nlu.intent, nlu.text, nlu.entities, conversation, nlu.confidence)
 
     result = AssistantResult(nlu=nlu, response=response, response_time_ms=t["ms"])
     conversation.add_turn(text, nlu, response.speech)

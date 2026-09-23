@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = [".venv", "venv", "__pycache__", "data", "assets"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # long lines are handled by line-length, not hard-failed
+    "B008",  # Streamlit widgets are legitimately called in defaults/args
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit pages run top-to-bottom; imports after st.set_page_config are
+# intentional, and the test helpers rebind modules deliberately.
+"pages/*.py" = ["E402"]
+"app.py" = ["E402"]
+"tests/*.py" = ["E402"]

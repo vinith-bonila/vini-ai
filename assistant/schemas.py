@@ -27,5 +27,5 @@ class SkillResponse:
     success: bool = True
 
     @classmethod
-    def error(cls, message: str) -> "SkillResponse":
+    def error(cls, message: str) -> SkillResponse:
         return cls(speech=message, success=False)

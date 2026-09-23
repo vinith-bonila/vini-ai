@@ -15,9 +15,16 @@ from __future__ import annotations
 
 from assistant.schemas import Link, SkillResponse
 from config import settings
+from services import llm_service
+from utils.helpers import failure_reason
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Said before a model-only answer, so a degraded reply is never mistaken for a
+# live one - the whole point of this skill is currency.
+_NOT_LIVE = ("I couldn't check live sources, so this is from my own knowledge "
+             "and may be out of date. ")
 
 _SYNTH_SYSTEM = (
     "You answer the user's question using ONLY the live web search results "
@@ -58,7 +65,7 @@ def _synthesize(question: str, results: list[dict]) -> str:
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.openai_api_key)  # base_url read from env (Groq/OpenAI)
+    client = OpenAI(**settings.openai_client_kwargs)
     prompt = (
         f"Question: {question}\n\n"
         f"Live web search results:\n{context_block}\n\n"
@@ -76,23 +83,50 @@ def _synthesize(question: str, results: list[dict]) -> str:
     return resp.choices[0].message.content.strip()
 
 
+def _without_search(text: str, context, reason: str) -> SkillResponse:
+    """No usable search results: answer from the model, flagged as not live.
+
+    Dead-ending here is the worse failure - many questions routed to this skill
+    are general knowledge the model can answer perfectly well.
+    """
+    fallback = llm_service.chat(text, context=context)
+    if not fallback.success:
+        # No model either, so report what actually broke.
+        return SkillResponse(speech=reason, success=False)
+    return SkillResponse(speech=_NOT_LIVE + fallback.speech, data={"live_sources": False})
+
+
 def run(text: str, entities=None, context=None) -> SkillResponse:
     try:
         results = _search(text, max_results=5)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Web search failed: %s", exc)
-        return SkillResponse(
-            speech="I couldn't reach live web search just now. Please try again in a moment.",
-            success=False,
+        return _without_search(
+            text, context,
+            f"I couldn't reach live web search just now - {failure_reason(exc)}.",
         )
 
     if not results:
+        return _without_search(
+            text, context,
+            "I searched the web but didn't find anything useful for that. "
+            "Try rephrasing the question.",
+        )
+
+    links = [Link(r["title"][:60] or "Source", r["url"]) for r in results[:3] if r["url"]]
+    try:
+        answer = _synthesize(text, results)
+    except Exception as exc:  # noqa: BLE001
+        # The search worked, so still hand back what was found rather than
+        # letting an LLM outage lose the results entirely.
+        logger.warning("Search synthesis failed: %s", exc)
+        top = next((r for r in results if r["body"]), None)
+        summary = f"Here's the top result: {top['title']} - {top['body']}" if top else ""
         return SkillResponse(
-            speech="I searched the web but didn't find anything useful for that. "
-                   "Try rephrasing the question.",
+            speech=(f"I found results but couldn't summarise them - {failure_reason(exc)}. "
+                    f"{summary}").strip(),
+            links=links,
             success=False,
         )
 
-    answer = _synthesize(text, results)
-    links = [Link(r["title"][:60] or "Source", r["url"]) for r in results[:3] if r["url"]]
     return SkillResponse(speech=answer, links=links, data={"query": text, "num_results": len(results)})

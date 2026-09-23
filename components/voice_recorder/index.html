@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg-card: rgba(255,255,255,0.035);
+    --border: rgba(248,250,252,0.09);
+    --indigo: #6366F1;
+    --violet: #8B5CF6;
+    --cyan: #22D3EE;
+    --magenta: #D946EF;
+    --text: #F8FAFC;
+    --muted: #94A3B8;
+    --danger: #FB7185;
+    --ease: cubic-bezier(.22, 1, .36, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text); overflow: hidden;
+  }
+  .wrap {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 4px 0 2px;
+  }
+  .mic-shell { position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; }
+
+  /* Ring that scales with the real measured input level */
+  .level-ring {
+    position: absolute; width: 74px; height: 74px; border-radius: 50%;
+    border: 1px solid rgba(34,211,238,0.5);
+    transform: scale(1); opacity: 0;
+    transition: opacity 200ms var(--ease);
+    pointer-events: none;
+  }
+  .mic-btn {
+    position: relative; width: 74px; height: 74px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(199,210,254,0.30);
+    background: radial-gradient(circle at 34% 28%, rgba(148,163,255,0.28), rgba(11,13,20,0.06) 62%),
+                linear-gradient(145deg, rgba(99,102,241,0.24), rgba(139,92,246,0.14));
+    box-shadow: 0 0 26px 4px rgba(99,102,241,0.18);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 160ms var(--ease), box-shadow 240ms var(--ease), background 240ms var(--ease), border-color 240ms var(--ease);
+    outline: none;
+  }
+  .mic-btn:hover { transform: scale(1.04); box-shadow: 0 0 34px 6px rgba(139,92,246,0.28); }
+  .mic-btn:active { transform: scale(0.97); }
+  .mic-btn:focus-visible { border-color: var(--cyan); }
+  .mic-btn svg { width: 26px; height: 26px; fill: var(--text); opacity: 0.92; transition: opacity 160ms var(--ease); }
+  /* While recording the icon gives way to the live waveform inside the orb. */
+  .wrap[data-state="listening"] .mic-btn svg { opacity: 0; }
+
+  .wrap[data-state="listening"] .mic-btn {
+    background: radial-gradient(circle at 34% 28%, rgba(165,243,252,0.32), rgba(11,13,20,0.06) 62%),
+                linear-gradient(145deg, rgba(34,211,238,0.28), rgba(99,102,241,0.16));
+    border-color: rgba(34,211,238,0.55);
+    box-shadow: 0 0 36px 8px rgba(34,211,238,0.30);
+  }
+  .wrap[data-state="listening"] .level-ring { opacity: 1; }
+  .wrap[data-state="sending"] .mic-btn {
+    background: linear-gradient(145deg, rgba(139,92,246,0.28), rgba(99,102,241,0.18));
+    border-color: rgba(139,92,246,0.5);
+  }
+  .wrap[data-state="error"] .mic-btn { border-color: rgba(251,113,133,0.55); box-shadow: 0 0 26px 4px rgba(251,113,133,0.20); }
+
+  /* Live waveform of the actual captured signal, drawn inside the orb */
+  .bars {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+    pointer-events: none; opacity: 0; transition: opacity 200ms var(--ease);
+  }
+  .bars span {
+    width: 3px; height: 4px; border-radius: 3px; background: var(--cyan);
+    transition: height 80ms linear;
+  }
+  .wrap[data-state="listening"] .bars { opacity: 1; }
+
+  .label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.1em; color: var(--muted); text-align: center;
+    min-height: 15px; transition: color 240ms var(--ease);
+  }
+  .wrap[data-state="listening"] .label { color: var(--cyan); }
+  .wrap[data-state="error"] .label { color: var(--danger); letter-spacing: 0.02em; }
+  .hint { font-size: 10px; color: rgba(148,163,184,0.65); letter-spacing: 0.04em; text-align: center; min-height: 13px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap" data-state="idle">
+  <div class="mic-shell">
+    <div class="level-ring" id="levelRing"></div>
+    <button class="mic-btn" id="micBtn" aria-label="Start voice input">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/>
+        <path d="M17.5 11a.9.9 0 0 0-1.8 0 3.7 3.7 0 0 1-7.4 0 .9.9 0 1 0-1.8 0 5.5 5.5 0 0 0 4.6 5.4V19H9.6a.9.9 0 1 0 0 1.8h4.8a.9.9 0 0 0 0-1.8h-1.5v-2.6a5.5 5.5 0 0 0 4.6-5.4z"/>
+      </svg>
+      <span class="bars" id="bars"></span>
+    </button>
+  </div>
+  <div class="label" id="label">TAP TO SPEAK</div>
+  <div class="hint" id="hint">Stops on its own when you finish</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------- //
+  // Streamlit component plumbing (vanilla postMessage protocol)
+  // ---------------------------------------------------------------- //
+  function post(type, data) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data), "*");
+  }
+  function setFrameHeight(h) { post("streamlit:setFrameHeight", { height: h }); }
+  function sendValue(value) { post("streamlit:setComponentValue", { value: value, dataType: "json" }); }
+
+  // ---------------------------------------------------------------- //
+  // Tunables (overridable from Python)
+  // ---------------------------------------------------------------- //
+  var silenceMs = 1500;   // hang-up delay after speech stops
+  var maxMs = 15000;      // hard cap on a single utterance
+  var minMs = 500;        // ignore accidental taps
+  var startGraceMs = 4000; // wait this long for speech before giving up
+
+  var SPEECH_RMS = 0.030; // above this counts as speaking
+  var SILENCE_RMS = 0.014; // below this counts as silence
+
+  // ---------------------------------------------------------------- //
+  // Elements / state
+  // ---------------------------------------------------------------- //
+  var wrap = document.getElementById("wrap");
+  var micBtn = document.getElementById("micBtn");
+  var label = document.getElementById("label");
+  var hint = document.getElementById("hint");
+  var levelRing = document.getElementById("levelRing");
+  var barsEl = document.getElementById("bars");
+
+  var BAR_COUNT = 7;
+  var bars = [];
+  for (var i = 0; i < BAR_COUNT; i++) {
+    var b = document.createElement("span");
+    barsEl.appendChild(b);
+    bars.push(b);
+  }
+
+  var state = "idle";
+  var stream = null, audioCtx = null, analyser = null, processor = null, source = null, muteGain = null;
+  var pcmChunks = [], captureRate = 44100;
+  var speechSeen = false, silenceSince = null, startedAt = 0, rafId = null;
+
+  function setState(next, text, sub) {
+    state = next;
+    wrap.setAttribute("data-state", next);
+    if (text !== undefined) label.textContent = text;
+    if (sub !== undefined) hint.textContent = sub;
+    micBtn.setAttribute("aria-label", next === "listening" ? "Stop voice input" : "Start voice input");
+  }
+
+  function resetBars() {
+    for (var i = 0; i < bars.length; i++) bars[i].style.height = "4px";
+    levelRing.style.transform = "scale(1)";
+  }
+
+  // ---------------------------------------------------------------- //
+  // Capture
+  // ---------------------------------------------------------------- //
+  function start() {
+    if (state === "listening" || state === "sending") return;
+    setState("requesting", "STARTING...", "Allow microphone access");
+
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    }).then(function (s) {
+      stream = s;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+      // Autoplay policies can hand back a suspended context; without this the
+      // analyser reads pure silence and the take would never capture anything.
+      if (audioCtx.state === "suspended" && audioCtx.resume) audioCtx.resume();
+      captureRate = audioCtx.sampleRate;
+      source = audioCtx.createMediaStreamSource(stream);
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.6;
+
+      processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = function (e) {
+        if (state !== "listening") return;
+        pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+
+      // ScriptProcessor only runs when connected to the graph; route it
+      // through a silent gain node so the mic is never echoed to speakers.
+      muteGain = audioCtx.createGain();
+      muteGain.gain.value = 0;
+      source.connect(analyser);
+      source.connect(processor);
+      processor.connect(muteGain);
+      muteGain.connect(audioCtx.destination);
+
+      pcmChunks = [];
+      speechSeen = false;
+      silenceSince = null;
+      startedAt = performance.now();
+      setState("listening", "LISTENING", "Pause when you're done - it stops itself");
+      monitor();
+    }).catch(function (err) {
+      var msg = "Microphone unavailable";
+      if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
+        msg = "Microphone permission denied";
+      } else if (err && err.name === "NotFoundError") {
+        msg = "No microphone found";
+      }
+      setState("error", msg, "Type your message below instead");
+    });
+  }
+
+  function monitor() {
+    var buf = new Uint8Array(analyser.fftSize);
+
+    function tick() {
+      if (state !== "listening") return;
+      analyser.getByteTimeDomainData(buf);
+
+      var sum = 0, peak = 0;
+      for (var i = 0; i < buf.length; i++) {
+        var v = (buf[i] - 128) / 128;
+        sum += v * v;
+        var a = Math.abs(v);
+        if (a > peak) peak = a;
+      }
+      var rms = Math.sqrt(sum / buf.length);
+
+      // Visualise the real signal.
+      var norm = Math.min(1, rms * 9);
+      levelRing.style.transform = "scale(" + (1 + norm * 0.28).toFixed(3) + ")";
+      for (var j = 0; j < bars.length; j++) {
+        var falloff = 1 - Math.abs(j - (bars.length - 1) / 2) / bars.length;
+        var h = 4 + norm * 22 * (0.55 + falloff * 0.75);
+        bars[j].style.height = h.toFixed(1) + "px";
+      }
+
+      var now = performance.now();
+      var elapsed = now - startedAt;
+
+      if (rms > SPEECH_RMS) {
+        speechSeen = true;
+        silenceSince = null;
+      } else if (rms < SILENCE_RMS) {
+        if (silenceSince === null) silenceSince = now;
+      } else {
+        silenceSince = null;
+      }
+
+      if (speechSeen && silenceSince !== null && (now - silenceSince) >= silenceMs && elapsed >= minMs) {
+        stop(true);
+        return;
+      }
+      // Nothing was ever said - release the mic instead of recording silence.
+      if (!speechSeen && elapsed >= startGraceMs) {
+        abort("DIDN'T CATCH THAT", "Tap again and speak after the ring lights up");
+        return;
+      }
+      if (elapsed >= maxMs) {
+        stop(true);
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  function teardown() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    try { if (processor) { processor.onaudioprocess = null; processor.disconnect(); } } catch (e) {}
+    try { if (source) source.disconnect(); } catch (e) {}
+    try { if (muteGain) muteGain.disconnect(); } catch (e) {}
+    try { if (analyser) analyser.disconnect(); } catch (e) {}
+    try { if (audioCtx && audioCtx.state !== "closed") audioCtx.close(); } catch (e) {}
+    try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+    processor = source = muteGain = analyser = audioCtx = stream = null;
+  }
+
+  function abort(text, sub) {
+    teardown();
+    pcmChunks = [];
+    resetBars();
+    setState("idle", text || "TAP TO SPEAK", sub !== undefined ? sub : "Stops on its own when you finish");
+  }
+
+  function stop(auto) {
+    if (state !== "listening") return;
+    setState("sending", "UNDERSTANDING...", "Sending what you said");
+    var rate = captureRate;
+    var chunks = pcmChunks;
+    pcmChunks = [];
+    teardown();
+    resetBars();
+
+    var samples = flatten(chunks);
+    if (samples.length < rate * (minMs / 1000)) {
+      abort("TOO SHORT", "Hold on a moment longer and try again");
+      return;
+    }
+
+    var target = 16000; // Whisper's native rate - keeps the payload small
+    var resampled = rate > target ? downsample(samples, rate, target) : samples;
+    var outRate = rate > target ? target : rate;
+    var wav = encodeWav(resampled, outRate);
+
+    sendValue({
+      id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+      audio: base64(wav),
+      mime: "audio/wav",
+      auto: !!auto,
+      seconds: +(resampled.length / outRate).toFixed(2)
+    });
+    setState("idle", "TAP TO SPEAK", "Stops on its own when you finish");
+  }
+
+  // ---------------------------------------------------------------- //
+  // WAV encoding (16-bit PCM mono) - matches what the STT layer expects
+  // ---------------------------------------------------------------- //
+  function flatten(chunks) {
+    var len = 0, i;
+    for (i = 0; i < chunks.length; i++) len += chunks[i].length;
+    var out = new Float32Array(len), off = 0;
+    for (i = 0; i < chunks.length; i++) { out.set(chunks[i], off); off += chunks[i].length; }
+    return out;
+  }
+
+  function downsample(buffer, fromRate, toRate) {
+    var ratio = fromRate / toRate;
+    var newLen = Math.round(buffer.length / ratio);
+    var out = new Float32Array(newLen);
+    var offset = 0;
+    for (var i = 0; i < newLen; i++) {
+      var next = Math.round((i + 1) * ratio);
+      var sum = 0, count = 0;
+      for (var j = offset; j < next && j < buffer.length; j++) { sum += buffer[j]; count++; }
+      out[i] = count ? sum / count : 0;
+      offset = next;
+    }
+    return out;
+  }
+
+  function encodeWav(samples, rate) {
+    var bytes = new ArrayBuffer(44 + samples.length * 2);
+    var view = new DataView(bytes);
+    function str(off, s) { for (var i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); }
+    str(0, "RIFF");
+    view.setUint32(4, 36 + samples.length * 2, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);   // PCM
+    view.setUint16(22, 1, true);   // mono
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    str(36, "data");
+    view.setUint32(40, samples.length * 2, true);
+    var off = 44;
+    for (var i = 0; i < samples.length; i++, off += 2) {
+      var s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Uint8Array(bytes);
+  }
+
+  function base64(u8) {
+    var chunk = 0x8000, parts = [];
+    for (var i = 0; i < u8.length; i += chunk) {
+      parts.push(String.fromCharCode.apply(null, u8.subarray(i, i + chunk)));
+    }
+    return btoa(parts.join(""));
+  }
+
+  // ---------------------------------------------------------------- //
+  // Wiring
+  // ---------------------------------------------------------------- //
+  micBtn.addEventListener("click", function () {
+    if (state === "listening") stop(false);   // manual stop is still available
+    else if (state !== "sending" && state !== "requesting") start();
+  });
+
+  window.addEventListener("message", function (event) {
+    if (!event.data || event.data.type !== "streamlit:render") return;
+    var args = event.data.args || {};
+    if (typeof args.silence_ms === "number") silenceMs = args.silence_ms;
+    if (typeof args.max_ms === "number") maxMs = args.max_ms;
+    if (typeof args.speech_rms === "number") SPEECH_RMS = args.speech_rms;
+    if (typeof args.silence_rms === "number") SILENCE_RMS = args.silence_rms;
+    setFrameHeight(document.body.scrollHeight);
+  });
+
+  resetBars();
+  post("streamlit:componentReady", { apiVersion: 1 });
+  setFrameHeight(document.body.scrollHeight);
+})();
+</script>
+</body>
+</html>

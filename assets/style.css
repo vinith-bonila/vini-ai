@@ -359,26 +359,15 @@ p, span, div, label { font-family: 'Inter', sans-serif; }
 /* ========================================================================
    MIC CONTROL
    ======================================================================== */
-.mic-caption {
-  text-align: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  margin: 0.35rem 0 0.3rem;
-}
-.mic-caption .glyph { color: var(--cyan); margin-right: 6px; }
-
-div[data-testid="stAudioInput"] {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 6px 10px;
-  transition: border-color var(--normal) var(--ease), background var(--normal) var(--ease);
-  max-width: 420px;
+/* The hands-free recorder is a custom component, so it lives in an iframe -
+   centre it and let its own (transparent) styling show through. */
+[data-testid="stMain"] iframe[title$="vini_voice_recorder"] {
+  display: block;
   margin: 0 auto;
+  border: none;
+  background: transparent;
+  color-scheme: normal;
 }
-div[data-testid="stAudioInput"]:hover { border-color: rgba(139,92,246,0.4); background: var(--bg-card-hover); }
 
 /* ========================================================================
    COMMAND BAR (text input)

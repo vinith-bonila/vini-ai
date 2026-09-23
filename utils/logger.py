@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import logging
 import sys
-from functools import lru_cache
+from functools import cache
 
 from config import settings
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_logger(name: str = "vini_ai") -> logging.Logger:
     """Return a configured logger. Cached so handlers attach only once."""
     logger = logging.getLogger(name)

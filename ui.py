@@ -12,10 +12,14 @@ Nothing here fabricates data - every value rendered comes from the actual
 """
 from __future__ import annotations
 
+import base64
+import binascii
 from html import escape
 from pathlib import Path
+from urllib.parse import urlparse
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from assistant.dispatcher import AssistantResult
 from config import settings
@@ -36,14 +40,6 @@ CORE_STATUS = {
     "understanding": "UNDERSTANDING...",
     "thinking": "THINKING...",
     "speaking": "SPEAKING",
-}
-
-MIC_STATUS = {
-    "idle": ("○", "Tap to speak"),
-    "listening": ("●", "Listening..."),
-    "understanding": ("◌", "Understanding..."),
-    "thinking": ("◌", "Thinking..."),
-    "speaking": ("◉", "Speaking..."),
 }
 
 # (active step index, indices already "done") for the live 5-node stepper.
@@ -166,12 +162,53 @@ def render_voice_core(target, state: str) -> None:
     target.markdown(_voice_core_html(state), unsafe_allow_html=True)
 
 
-def mic_caption(state: str) -> None:
-    glyph, label = MIC_STATUS.get(state, MIC_STATUS["idle"])
-    st.markdown(
-        f"<div class='mic-caption'><span class='glyph'>{glyph}</span>{label}</div>",
-        unsafe_allow_html=True,
+# --------------------------------------------------------------------------- #
+# Hands-free voice input
+# --------------------------------------------------------------------------- #
+_recorder = components.declare_component(
+    "vini_voice_recorder",
+    path=str(Path(__file__).parent / "components" / "voice_recorder"),
+)
+
+
+def voice_recorder(
+    *,
+    silence_ms: int = 1500,
+    max_ms: int = 15000,
+    speech_rms: float = 0.030,
+    silence_rms: float = 0.014,
+    key: str = "voice_recorder",
+) -> tuple[bytes, str] | None:
+    """Tap-once microphone that stops itself when you stop talking.
+
+    Records in the browser, watches the real input level, and ends the take
+    after `silence_ms` of quiet - so a turn needs one tap, not two. Returns
+    `(wav_bytes, recording_id)` for a finished take, else None. The id is
+    stable for a given recording, so callers can tell a fresh take apart from
+    the same value being replayed on a later rerun.
+
+    `speech_rms` / `silence_rms` are the loudness thresholds (0-1) for "you are
+    talking" and "you have stopped". Raise them in a noisy room if takes never
+    end on their own; lower them if a quiet mic gets cut off mid-sentence.
+    """
+    payload = _recorder(
+        silence_ms=silence_ms,
+        max_ms=max_ms,
+        speech_rms=speech_rms,
+        silence_rms=silence_rms,
+        key=key,
+        default=None,
     )
+    if not isinstance(payload, dict):
+        return None
+    encoded = payload.get("audio")
+    recording_id = payload.get("id")
+    if not encoded or not recording_id:
+        return None
+    try:
+        return base64.b64decode(encoded), str(recording_id)
+    except (binascii.Error, ValueError):
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -194,18 +231,34 @@ def sidebar_nav() -> None:
         connection_status()
 
 
+def _endpoint_host() -> str:
+    """Host the OpenAI-compatible calls go to, so a provider/key mismatch shows."""
+    return urlparse(settings.openai_base_url).hostname or settings.openai_base_url
+
+
 def connection_status() -> None:
-    """Real backend connection state - never fabricated."""
+    """Real backend connection state - never fabricated.
+
+    A key being present only means calls will be *attempted*; it cannot prove
+    the endpoint accepts it. The endpoint is shown alongside the model so a
+    mismatch (e.g. a Groq model against api.openai.com) is visible here rather
+    than only as a failed reply.
+    """
+    llm_detail = (
+        f"{settings.openai_chat_model} @ {_endpoint_host()}"
+        if settings.openai_enabled
+        else "structured skills only"
+    )
     rows = [
-        ("LLM", "connected" if settings.openai_enabled else "offline", settings.openai_chat_model if settings.openai_enabled else "structured skills only"),
-        ("STT", "connected" if (settings.stt_backend != "openai" or settings.openai_enabled) else "offline", settings.stt_backend),
-        ("TTS", "connected", settings.tts_backend),
+        ("LLM", settings.openai_enabled, llm_detail),
+        ("STT", settings.stt_backend != "openai" or settings.openai_enabled, settings.stt_backend),
+        ("TTS", True, settings.tts_backend),
     ]
-    for name, state, detail in rows:
-        dot = "on" if state == "connected" else "off"
+    for name, connected, detail in rows:
+        dot = "on" if connected else "off"
         st.markdown(
             f"<div class='status-row'><span class='status-dot {dot}'></span>"
-            f"<span>{name}</span><span class='val'>&middot; {detail}</span></div>",
+            f"<span>{name}</span><span class='val'>&middot; {escape(detail)}</span></div>",
             unsafe_allow_html=True,
         )
 

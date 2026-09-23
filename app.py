@@ -5,7 +5,6 @@ Run with:  streamlit run app.py
 """
 from __future__ import annotations
 
-import hashlib
 import re
 
 import streamlit as st
@@ -20,11 +19,11 @@ from ui import (
     brand_header,
     hero_headline,
     inject_css,
-    mic_caption,
     render_nlu_panels,
     render_voice_core,
     sidebar_nav,
     user_bubble,
+    voice_recorder,
 )
 
 st.set_page_config(page_title="VINI AI", page_icon="\U0001F399️", layout="wide")
@@ -37,7 +36,7 @@ _defaults = {
     "conversation": None,
     "last_result": None,
     "status": "idle",
-    "last_audio_hash": None,
+    "last_recording_id": None,
     "speak_replies": True,
     "_pending_audio": None,
 }
@@ -113,7 +112,9 @@ with st.sidebar:
     st.session_state.speak_replies = st.toggle("Speak replies aloud", value=st.session_state.speak_replies)
     st.divider()
 
-    st.caption(f"Current session · {len(conv.turns)} turns")
+    # Filled at the end of the run: the sidebar renders before this turn is
+    # processed, so counting here would always lag one turn behind.
+    session_info = st.empty()
     if st.button("Clear conversation", width="stretch"):
         conv.clear()
         st.session_state.last_result = None
@@ -130,10 +131,9 @@ core_ph = st.empty()
 render_voice_core(core_ph, st.session_state.status)
 
 # --------------------------------------------------------------------------- #
-# Mic input
+# Mic input - one tap, then it stops itself when you stop speaking
 # --------------------------------------------------------------------------- #
-mic_caption(st.session_state.status)
-audio = st.audio_input("Voice", label_visibility="collapsed") if hasattr(st, "audio_input") else None
+recording = voice_recorder(silence_ms=1500, max_ms=15000)
 
 # --------------------------------------------------------------------------- #
 # Command bar (secondary text input)
@@ -166,13 +166,12 @@ if submitted and typed.strip():
     process(typed, core_ph)
 elif clicked_suggestion:
     process(clicked_suggestion, core_ph)
-elif audio is not None:
-    audio_bytes = audio.getvalue()
-    digest = hashlib.md5(audio_bytes).hexdigest()
-    if digest != st.session_state.last_audio_hash:
-        st.session_state.last_audio_hash = digest
-        st.session_state.status = "listening"
-        render_voice_core(core_ph, "listening")
+elif recording is not None:
+    audio_bytes, recording_id = recording
+    if recording_id != st.session_state.last_recording_id:
+        st.session_state.last_recording_id = recording_id
+        st.session_state.status = "understanding"
+        render_voice_core(core_ph, "understanding")
         spoken, error = "", None
         try:
             spoken = transcribe(audio_bytes)
@@ -228,3 +227,6 @@ if conv.turns:
 # --------------------------------------------------------------------------- #
 st.divider()
 about_section()
+
+turns = len(conv.turns)
+session_info.caption(f"Current session · {turns} turn{'' if turns == 1 else 's'}")

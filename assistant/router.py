@@ -7,9 +7,10 @@ Each handler has the signature: handler(text, entities, context) -> SkillRespons
 """
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from assistant.schemas import SkillResponse
+from config import settings
 from services import (
     browser_service,
     calculator_service,
@@ -59,10 +60,42 @@ ROUTES["GREETING"] = _greeting
 ROUTES["GOODBYE"] = _goodbye
 
 
-def route(intent: str, text: str, entities, context) -> SkillResponse:
+# Intents whose own failure message is already the right answer, so replacing
+# it with an LLM guess would be worse:
+#   GENERAL_CHAT / WEB_ANSWER - the LLM has already been tried
+#   OPEN_APP                  - "disabled on a hosted server" is the answer
+#   GREETING / GOODBYE        - cannot fail
+_NO_LLM_FALLBACK = {"GENERAL_CHAT", "WEB_ANSWER", "OPEN_APP", "GREETING", "GOODBYE"}
+
+
+def route(intent: str, text: str, entities, context, confidence: float = 1.0) -> SkillResponse:
+    """Dispatch to a skill, falling back to the LLM on a low-confidence miss.
+
+    A weak classification that lands on a deterministic skill used to dead-end
+    on that skill's error ("tell me what to translate...") even when the user
+    had asked a perfectly answerable question. When the skill fails and the
+    classifier was unsure, the intent is treated as a misroute.
+    """
     handler = ROUTES.get(intent, llm_service.chat)
     try:
-        return handler(text, entities, context)
+        response = handler(text, entities, context)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Handler for %s failed: %s", intent, exc)
-        return SkillResponse.error("Something went wrong handling that request.")
+        response = SkillResponse.error("Something went wrong handling that request.")
+
+    if (
+        not response.success
+        and intent not in _NO_LLM_FALLBACK
+        and confidence < settings.skill_fallback_confidence
+    ):
+        logger.info(
+            "Skill %s failed at %.0f%% confidence; deferring to the LLM.",
+            intent, confidence * 100,
+        )
+        fallback = llm_service.chat(text, entities, context)
+        # Keep the skill's own message if the LLM cannot answer either - it is
+        # the more specific of the two.
+        if fallback.success:
+            return fallback
+
+    return response
