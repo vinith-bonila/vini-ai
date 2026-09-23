@@ -23,7 +23,8 @@ ddgs>=9.0.0            # live web search (DuckDuckGo, no API key)
 
 # ─── Speech + LLM ───────────────────────────────────────────────────
 openai>=1.40.0          # chat, hosted Whisper (STT), hosted TTS
-gTTS==2.5.4             # free text-to-speech (default TTS backend)
+edge-tts>=6.1.0         # natural neural voices, no API key (default TTS backend)
+gTTS==2.5.4             # free text-to-speech (fallback when edge is unavailable)
 
 # ─── Optional upgrades (uncomment to enable) ───────────────────────
 # sentence-transformers>=3.0.0   # USE_EMBEDDINGS=true  (better intent accuracy)

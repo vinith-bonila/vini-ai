@@ -93,7 +93,22 @@ class Settings:
     # --- Speech ---------------------------------------------------------
     # "openai" uses the hosted Whisper/TTS API; "local" uses on-device libs.
     stt_backend: str = field(default_factory=lambda: os.getenv("STT_BACKEND", "openai"))
-    tts_backend: str = field(default_factory=lambda: os.getenv("TTS_BACKEND", "gtts"))
+    tts_backend: str = field(default_factory=lambda: _get_str("TTS_BACKEND", "edge"))
+    # Microsoft neural voice used by the "edge" backend. en-IN-NeerjaNeural is
+    # an Indian-English assistant voice; en-US-AriaNeural and en-GB-SoniaNeural
+    # are the US and UK equivalents.
+    edge_voice: str = field(default_factory=lambda: _get_str("EDGE_VOICE", "en-IN-NeerjaNeural"))
+    # Proper nouns Whisper otherwise mangles ("Visakhapatnam" -> "Vietnam").
+    # Passed as a transcription prompt to bias decoding, not as a filter.
+    stt_vocabulary: str = field(
+        default_factory=lambda: _get_str(
+            "STT_VOCABULARY",
+            "VINI AI, Visakhapatnam, Andhra Pradesh, Ankleshwar, Vizag, IIPE, "
+            "Indian Institute of Petroleum and Energy, Bengaluru, Mumbai, Delhi, "
+            "Hyderabad, Chennai, Kolkata, petroleum engineering, refinery, "
+            "crude oil, drilling, chemical engineering, thermodynamics",
+        )
+    )
     default_tts_language: str = field(default_factory=lambda: os.getenv("DEFAULT_TTS_LANGUAGE", "en"))
     voice_speed: float = field(default_factory=lambda: float(os.getenv("VOICE_SPEED", "1.0")))
 

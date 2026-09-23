@@ -66,7 +66,8 @@ def test_empty_audio_is_not_an_error(keyless):
 
 
 def test_tts_default_backend_does_not_need_the_provider():
-    assert config.settings.tts_backend == "gtts"
+    """Both edge and gtts are keyless; only the openai backend needs one."""
+    assert config.settings.tts_backend in {"edge", "gtts"}
 
 
 def test_search_without_key_still_returns_snippets(monkeypatch):

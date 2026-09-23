@@ -25,6 +25,7 @@ from ui import (
     user_bubble,
     voice_recorder,
 )
+from utils.helpers import speech_text
 
 st.set_page_config(page_title="VINI AI", page_icon="\U0001F399️", layout="wide")
 inject_css()
@@ -58,8 +59,12 @@ SUGGESTIONS = [
 
 
 def _speech_lead(text: str, limit: int = 320) -> str:
-    """Speak only a short lead for long answers so voice stays pleasant."""
-    text = (text or "").strip()
+    """Speak only a short lead for long answers so voice stays pleasant.
+
+    Markdown is stripped first, so the budget is spent on words rather than on
+    syntax, and the cut never lands inside a table row or a link.
+    """
+    text = speech_text(text)
     if len(text) <= limit:
         return text
     sentences = re.split(r"(?<=[.!?])\s+", text)

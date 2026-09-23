@@ -55,9 +55,17 @@ def test_fresh_install_resolves_to_groq(monkeypatch):
     assert s.openai_stt_model == "whisper-large-v3"
 
 
-def test_fresh_install_keeps_gtts(monkeypatch):
+def test_fresh_install_tts_needs_no_api_key(monkeypatch):
+    """Voice must work before any key is configured, on any provider."""
     cfg = load_config(monkeypatch)
-    assert cfg.settings.tts_backend == "gtts"
+    assert cfg.settings.tts_backend in {"edge", "gtts"}
+    assert cfg.settings.tts_backend != "openai"
+
+
+def test_fresh_install_uses_the_neural_voice(monkeypatch):
+    cfg = load_config(monkeypatch)
+    assert cfg.settings.tts_backend == "edge"
+    assert cfg.settings.edge_voice
 
 
 def test_no_api_key_is_ever_hardcoded(monkeypatch):

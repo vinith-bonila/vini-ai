@@ -39,6 +39,11 @@ def _transcribe_openai(audio_bytes: bytes) -> str:
             model=settings.openai_stt_model,
             file=file_tuple,
             response_format="text",
+            # Pinning the language stops short clips being decoded as another
+            # one, and the prompt biases decoding towards names the model
+            # otherwise mangles - "Visakhapatnam" came back as "Vietnam".
+            language=settings.default_tts_language or "en",
+            prompt=settings.stt_vocabulary,
         )
     except Exception as exc:  # noqa: BLE001
         raise TranscriptionError(str(exc)) from exc
